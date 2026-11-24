@@ -2496,6 +2496,19 @@ payee: payee.id,
     expect((await budgetedOf(mcp, income.id))?.budgeted).toBeUndefined();
   });
 
+  test('manage_budget_months set_carryover - ERROR: an income category is refused in plain words and the flag is unchanged (#771)', async ({ mcp, cleanup }) => {
+    const income = await makeIncomeCategory(mcp, cleanup);
+    const text = await refusal(() => mcp.call('manage_budget_months', { action: 'set_carryover', month: currentMonth(), category_id: income.id, flag: true }));
+    expect(text).toContain('is an income category, and carryover applies only to expense categories. Nothing was written.');
+    expect(text).not.toContain('budget-set-carryover');
+    expect((await budgetedOf(mcp, income.id))?.carryover).not.toBe(true);
+  });
+
+  test('manage_budget_months set_carryover - ERROR: an unknown category names the compact lookup (#771)', async ({ mcp }) => {
+    const text = await refusal(() => mcp.call('manage_budget_months', { action: 'set_carryover', month: currentMonth(), category_id: '00000000-0000-4000-8000-000000000771', flag: true }));
+    expect(text).toMatch(/Use list_entities with type category/);
+  });
+
   test('manage_budget_months transfer - ERROR: an income category is refused as source or target and the expense side is unchanged (#759)', async ({ mcp, makeCategory, cleanup }) => {
     const income = await makeIncomeCategory(mcp, cleanup);
     const expense = await makeCategory();
@@ -4857,6 +4870,22 @@ test.describe('Docker E2E - compact manage_accounts (#676)', () => {
     expect(listed.some((a: any) => a?.name === name)).toBe(false);
   });
 
+  // #771: refusal texts on the compact surface name compact fields and the compact list tool.
+  test('manage_accounts close - ERROR: a balance with no transfer names transfer_account_id, not the legacy field (#771)', async ({ mcp, makeAccount }) => {
+    const src = await makeAccount({ balance: 5000 });
+    const text = await refusal(() => mcp.call('manage_accounts', { action: 'close', entity: 'account', id: src.id }));
+    expect(text).toContain('transfer_account_id');
+    expect(text).not.toContain('transferAccountId');
+    const listed = (await mcp.call('list_entities', { type: 'account' })) as any[];
+    expect(listed.find((a: any) => a?.id === src.id)?.closed).toBeFalsy();
+  });
+
+  test('manage_accounts delete - ERROR: an unknown id is refused with the compact list tool as the next step (#771)', async ({ mcp }) => {
+    const text = await refusal(() => mcp.call('manage_accounts', { action: 'delete', entity: 'account', id: '00000000-0000-4000-8000-000000000771' }));
+    expect(text).toMatch(/not found\. Use list_entities with type account/);
+    expect(text).not.toMatch(/Account with ID/);
+  });
+
   // #768: a close whose pairing cannot keep a category is refused before anything is written.
   test('manage_accounts close - ERROR: an on-budget account with a balance into an off-budget one needs transfer_category_id (#768)', async ({ mcp, makeAccount, cleanup }) => {
     const src = await makeAccount({ balance: 5000 });
@@ -4865,7 +4894,8 @@ test.describe('Docker E2E - compact manage_accounts (#676)', () => {
     cleanup.add(CLEANUP_ORDER.account, `account ${name}`, async () => {
       await mcp.call('manage_accounts', { action: 'delete', entity: 'account', id: dest }).catch(() => undefined);
     });
-    expect(await refusal(() => mcp.call('manage_accounts', { action: 'close', entity: 'account', id: src.id, transfer_account_id: dest }))).toMatch(/needs transferCategoryId/);
+    expect(await refusal(() => mcp.call('manage_accounts', { action: 'close', entity: 'account', id: src.id, transfer_account_id: dest }))).toMatch(/needs transfer_category_id/);
+    expect(await refusal(() => mcp.call('manage_accounts', { action: 'close', entity: 'account', id: src.id, transfer_account_id: dest }))).not.toMatch(/transferCategoryId/);
     const listed = (await mcp.call('list_entities', { type: 'account' })) as any[];
     const found = listed.find((a: any) => a?.id === src.id);
     expect(found).toBeTruthy();
@@ -6663,6 +6693,31 @@ test.describe('legacy smoke (MCP_TOOL_SURFACE=all)', () => {
     expect(await refusal(() => mcp.call('actual_accounts_create', { name: bad, offbudget: 'yes' }))).toMatch(/offbudget/);
     const after = (await mcp.call('list_entities', { type: 'account' })) as any[];
     expect(after.some((a: any) => a?.name === bad)).toBe(false);
+  });
+
+  // #771: the legacy tools keep the legacy field and tool names in the same refusals.
+  test('actual_accounts_close, actual_accounts_delete and actual_budgets_set_carryover - the legacy refusal texts (#771)', async ({ mcp, makeAccount, cleanup }) => {
+    const src = await makeAccount({ balance: 5000 });
+    expect(await refusal(() => mcp.call('actual_accounts_close', { id: src.id }))).toContain('transferAccountId');
+    expect(await refusal(() => mcp.call('actual_accounts_delete', { id: '00000000-0000-4000-8000-000000000771' }))).toMatch(/actual_accounts_list/);
+    const groups = (await mcp.call('actual_category_groups_get')) as any;
+    const group = ((Array.isArray(groups) ? groups : groups?.groups ?? []) as any[]).find((g: any) => g?.is_income === true);
+    expect(group, 'the test budget must have an income group').toBeTruthy();
+    const name = `E2E-Inc771L-${uniqueSuffix()}`;
+    cleanup.add(CLEANUP_ORDER.category, `category ${name}`, async () => {
+      const data = (await mcp.call('actual_categories_get')) as any;
+      const leaked = ((Array.isArray(data) ? data : data?.categories ?? []) as any[]).find((c: any) => c?.name === name);
+      if (leaked) await mcp.call('actual_categories_delete', { id: leaked.id }).catch(() => undefined);
+    });
+    const created = (await mcp.call('actual_categories_create', { name, group_id: group.id })) as any;
+    const incomeId = (typeof created === 'string' ? created : created?.categoryId ?? created?.id) as string;
+    const text = await refusal(() => mcp.call('actual_budgets_set_carryover', { month: currentMonth(), categoryId: incomeId, flag: true }));
+    expect(text).toContain('is an income category, and carryover applies only to expense categories. Nothing was written.');
+    expect(text).not.toContain('budget-set-carryover');
+    const month = (await mcp.call('list_budget_months', { month: currentMonth() })) as any;
+    const row = ((month?.categoryGroups ?? []) as any[]).flatMap((g: any) => g?.categories ?? []).find((c: any) => c?.id === incomeId);
+    expect(row?.carryover).not.toBe(true);
+    expect(await refusal(() => mcp.call('actual_budgets_set_carryover', { month: currentMonth(), categoryId: '00000000-0000-4000-8000-000000000771', flag: true }))).toMatch(/actual_categories_get/);
   });
 
   // #768: the legacy delete reports how many transfers it unlinked; the legacy close refuses the same pairings.
