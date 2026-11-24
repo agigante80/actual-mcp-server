@@ -42,11 +42,12 @@ const REPORT = { newTransactions: ['n1'], matchedTransactions: [], updatedAccoun
   api.sync = async () => { apiSyncCalls++; };
   api.shutdown = async () => {};
   let rawPayeeCreates = 0;
-  api.createPayee = async () => { rawPayeeCreates++; return 'payee-619'; };
+  let payeeCreateMs = 0;
+  api.createPayee = async () => { rawPayeeCreates++; if (payeeCreateMs) await sleep(payeeCreateMs); return 'payee-619'; };
   api.getPayees = async () => [];
 
   const adapterMod = await import('../../dist/src/lib/actual-adapter.js');
-  const { default: config } = await import('../../dist/src/config.js');
+  const { default: config, configSchema } = await import('../../dist/src/config.js');
   const { connectionPool } = await import('../../dist/src/lib/ActualConnectionPool.js');
   const { requestContext } = await import('../../dist/src/lib/requestContext.js');
   adapterMod._setSkipApiInitForTests(true);
@@ -129,6 +130,30 @@ const REPORT = { newTransactions: ['n1'], matchedTransactions: [], updatedAccoun
     check(err === undefined, 'the queued write resolved', err?.message);
     check(rawPayeeCreates === 1, 'its raw write ran once', String(rawPayeeCreates));
     await syncDone;
+  }
+
+  console.log('\n[#619] positive: the lock-wait bound is disarmed once the batch has the lock');
+  {
+    // Three writes in one batch, 200 ms each: the third starts 400 ms after dispatch, past the
+    // 300 ms bound, while its OWN batch holds the lock. It must run, not be called "never ran".
+    prime();
+    rawPayeeCreates = 0;
+    payeeCreateMs = 200;
+    const errs = await pooled(() => Promise.all([1, 2, 3].map(i => errOf(() => adapterMod.createPayee({ name: `Batch 619 ${i}` })))));
+    payeeCreateMs = 0;
+    check(errs.every(e => e === undefined), 'all three writes of the batch resolved', errs.map(e => e?.message).join(' | '));
+    check(rawPayeeCreates === 3, 'and each raw write ran', String(rawPayeeCreates));
+  }
+
+  console.log('\n[#619] parse and clamp of ACTUAL_BANK_SYNC_TIMEOUT_MS');
+  {
+    const parse = (v) => configSchema.shape.ACTUAL_BANK_SYNC_TIMEOUT_MS.parse(v);
+    check(parse(undefined) === 300000, 'unset gives the default');
+    check(parse('0') === 0, '0 means no bound');
+    check(parse('abc') === 300000, 'a non-number falls back to the default');
+    check(parse('-5') === 300000, 'a negative value falls back to the default');
+    check(parse('100') === 250, 'a value under the floor clamps to 250');
+    check(parse('45000') === 45000, 'a valid value is kept');
   }
 
   console.log('\n[#619] positive (fallback path, no session): the same bound applies');

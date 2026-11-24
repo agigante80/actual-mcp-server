@@ -70,6 +70,8 @@ const logger = createModuleLogger('API LOCK');
  * ticket cites. Eight operations that each run to ACTUAL_OP_TIMEOUT_MS is 240 seconds at the
  * default, which is past most clients' own request timeouts. That is the accepted trade: bounding
  * by time instead would need the lock to know how long an operation has left, which it cannot.
+ * #619: a bank sync has its own, longer bound (ACTUAL_BANK_SYNC_TIMEOUT_MS, 300 seconds by default),
+ * so eight skipped bank syncs against a hung link is 40 minutes. Accepted: see the ticket.
  */
 const MAX_AFFINITY_SKIPS = 8;
 
