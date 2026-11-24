@@ -28,6 +28,9 @@ export default createTool({
     if (res?.message === 'template-errors') {
       throw new Error(`No budget templates were applied for ${month}: fix these template errors in the category notes first.\n${res.pre ?? ''}`.trimEnd());
     }
+    if (res?.type === 'error') {
+      throw new Error(`Budget template application reported an error for ${month}: ${res.message}\n${res.pre ?? ''}`.trimEnd());
+    }
     return { success: true as const, month, applied: res?.count ?? 0 };
   },
   examples: [

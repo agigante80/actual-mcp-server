@@ -152,6 +152,13 @@ const MISSING = '10000000-0000-4000-8000-000000000099';
       'error says nothing was applied and carries upstream\'s template errors', err?.message);
   }
 
+  {
+    reset(ON, { type: 'error', message: 'apply-failed', pre: 'Invalid goal' });
+    const { res, err } = await call({ month: '2026-02' });
+    check(!res && /Budget template application reported an error for 2026-02: apply-failed\nInvalid goal/.test(err?.message ?? ''),
+      'typed error notifications reject with upstream details', err?.message);
+  }
+
   console.log('\n[apply-templates] NEGATIVE: schema');
   for (const bad of [{}, { month: '2026-13' }, { month: '2026-02', categoryId: 'nope' }, { month: '2026-02', extra: 1 }]) {
     reset(ON);

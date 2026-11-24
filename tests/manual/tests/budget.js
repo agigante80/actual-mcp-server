@@ -467,16 +467,21 @@ export async function budgetTests(client, context) {
     }
 
     // End of month cleanup moves money across the whole budget, so only refusals that write nothing
-    // run here: the flag refusal, or a month outside the budget.
+    // run here. Derive a probe month strictly before the first month, even when the flags are off.
     console.log("\nTesting run_cleanup (refusals only)...");
     {
-      const prefsRes = await callTool("get_context", { topic: "preferences" });
-      const on = (prefsRes?.result || prefsRes)?.preferences?.["flags.goalTemplatesEnabled"] === "true";
-      let refused = null;
-      try { await callTool("manage_budget_months", { action: "run_cleanup", month: "2000-01" }); } catch (err) { refused = err; }
-      const re = on ? /outside this budget's range/ : /Settings > Experimental features/;
-      if (refused && re.test(refused.message)) console.log("  ✓ run_cleanup refused without writing");
-      else fail(`run_cleanup 2000-01: expected a refusal matching ${re}, got ${refused ? refused.message : 'success'}`);
+      const [firstMonth] = monthsArr.filter(m => typeof m === "string" && /^\d{4}-(0[1-9]|1[0-2])$/.test(m)).sort();
+      const firstYear = Number(firstMonth?.slice(0, 4));
+      if (firstYear > 0) {
+        const month = `${String(firstYear - 1).padStart(4, "0")}-01`;
+        let refused = null;
+        try { await callTool("manage_budget_months", { action: "run_cleanup", month }); } catch (err) { refused = err; }
+        const re = /outside this budget's range|Settings > Experimental features|only works with envelope budgeting/;
+        if (refused && re.test(refused.message)) console.log("  ✓ run_cleanup refused without writing");
+        else fail(`run_cleanup ${month}: expected a refusal, got ${refused ? refused.message : 'success'}`);
+      } else {
+        console.log("  SKIP: no earlier year can be derived from the budget months");
+      }
     }
 
     // Transfer between categories

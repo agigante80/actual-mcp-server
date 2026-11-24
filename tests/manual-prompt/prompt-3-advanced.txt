@@ -146,30 +146,34 @@ Select a second different category for the transfer test. Save as `{budget_cat2_
   Expect: success (hold released)
   Verify: toBudget restored to pre-hold value
 
+- For the next two tests, use list_entities with type "category_group" to find an expense group.
+  Create "MCP-Automation-{TS}" in it with manage_categories, action "create", entity "category".
+  Save its returned categoryId as {automation_cat_id}. Stop these two tests if the create fails.
+
 - manage_budget_months, action: "apply_templates"
-  Input: { action: "apply_templates", month: current month, category_id: "{budget_cat_id}" }
-  (overwrite: true recomputes every templated category; do NOT use it here, it changes categories
-    this test does not own.)
-  Expect: EITHER success { success: true, applied: 0 } (that category has no #template note)
+  Input: { action: "apply_templates", month: current month, category_id: "{automation_cat_id}" }
+  Expect: EITHER success { success: true, applied: 0 } (the new category has no template)
     OR, when the budget has goal templates off, a refusal naming "Settings > Experimental
     features". Both are correct; which one depends on the budget. Do NOT run it without
     category_id: a whole-month apply changes categories this test does not own.
   Negative: { action: "apply_templates", month: "2026-1" } is refused naming the YYYY-MM format.
 
 - manage_categories, action: "set_automations"
-  Input: { action: "set_automations", id: "{budget_cat_id}", automations: [{ type: "fixed", amount: 2500 }] }
+  Input: { action: "set_automations", id: "{automation_cat_id}", automations: [{ type: "fixed", amount: 2500 }] }
   Expect: EITHER { success: true, count: 1 } OR, when goal templates or the Budget automations UI
-    are off, a refusal naming "Settings > Experimental features". On success, call it again with
-    automations: [] and replace: true to clear them (count 0).
-  Then: { action: "set_automations", id: "{budget_cat_id}", cleanup: ["source"] }
-    Expect: cleanup 1, and the automation kept. Clear with automations: [], replace: true, cleanup: [].
+    are off, a refusal naming "Settings > Experimental features".
+  Only after a successful write, call set_automations on {automation_cat_id} with cleanup: ["source"].
+    Expect cleanup 1 and count 1. If the first write was refused, skip this call and the clear call.
   Negative: automations: [{ type: "schedule" }] is refused: scheduleId is required.
+  Before moving on, clear any saved settings with automations: [], replace: true, cleanup: [].
+    Use manage_budget_months set_amount with amount 0 for {automation_cat_id} in the current month,
+    then delete the test category with manage_categories, action "delete", entity "category".
+    Attempt category cleanup even when an assertion fails.
 
 - manage_budget_months, action: "run_cleanup"
-  Input: { action: "run_cleanup", month: "2000-01" }
-  Expect: a refusal: "outside this budget's range" when goal templates are on, or naming
-    "Settings > Experimental features" when they are off. Do NOT run it on a real month: end of
-    month cleanup moves money across the whole budget.
+  Input: { action: "run_cleanup", month: "2026-13" }
+  Expect: a refusal naming the YYYY-MM format. Use only this invalid month because a real cleanup
+    moves money across the whole budget.
 
 - manage_budget_months, action: "transfer"
   Input: { action: "transfer", month: current month, from_category_id: "{budget_cat_id}",

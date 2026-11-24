@@ -36,12 +36,13 @@ function nextMonth(m) {
   return mo === 12 ? `${y + 1}-01` : `${y}-${String(mo + 1).padStart(2, '0')}`;
 }
 
-function makeBudget({ preExisting, throwOn = null, driftOn = null }) {
+function makeBudget({ preExisting, throwOn = null, driftOn = null, goalTemplates = false, budgetMonths = [thisMonth] }) {
   const groups = new Map(); // id -> { id, name, is_income, categories: [{ id, name }] }
   const cells = new Map();  // `${month}|${catId}` -> { budgeted, carryover }
   const accounts = new Map();
   const buffer = new Map();
   const writes = [];        // category ids every budget write targeted
+  const cleanupMonths = [];
   let seq = 0;
   if (preExisting) {
     groups.set(GROUP, { id: GROUP, name: 'Usual Expenses', is_income: false, categories: [{ id: PRE.id, name: PRE.name, group_id: GROUP }] });
@@ -111,7 +112,7 @@ function makeBudget({ preExisting, throwOn = null, driftOn = null }) {
         return [];
       case 'list_budget_months/':
         // list_budget_months has no selector: a `month` picks one month, no key lists them.
-        return args.month ? month(args.month) : [month(thisMonth)];
+        return args.month ? month(args.month) : budgetMonths;
       case 'manage_budget_months/set_amount':
         return setAmount(args.month, args.category_id, args.amount);
       case 'manage_budget_months/set_carryover':
@@ -143,12 +144,19 @@ function makeBudget({ preExisting, throwOn = null, driftOn = null }) {
         return { success: true };
       }
       case 'get_context/preferences':
-        return { preferences: {} };
+        return { preferences: goalTemplates ? { 'flags.goalTemplatesEnabled': 'true' } : {} };
       case 'manage_budget_months/apply_templates':
-        // Goal templates are off in this budget (no flag above), so every call is refused, as the
-        // adapter does, and nothing is written. A whole-month apply would touch every category.
+        if (goalTemplates) {
+          if (!exists(args.category_id)) throw new Error('Category not found');
+          return { result: { success: true, month: args.month, applied: 0 } };
+        }
         throw new Error('Budget templates are turned off for this budget. Enable them in Actual under Settings > Experimental features > Goal templates, then try again. Nothing was changed.');
       case 'manage_budget_months/run_cleanup':
+        if (goalTemplates) {
+          cleanupMonths.push(args.month);
+          if (budgetMonths.length && !budgetMonths.includes(args.month)) throw new Error('Month is outside this budget\'s range');
+          return { result: { success: true } };
+        }
         throw new Error('Budget templates are turned off for this budget. Enable them in Actual under Settings > Experimental features > Goal templates, then try again. Nothing was changed.');
       case 'manage_categories/set_automations':
         // Automations are off in this budget too; a schedule item without scheduleId is a schema refusal.
@@ -162,7 +170,7 @@ function makeBudget({ preExisting, throwOn = null, driftOn = null }) {
         throw new Error(`stub: unexpected call ${name}`);
     }
   };
-  return { client: { callTool }, writes, month, groups, exists };
+  return { client: { callTool }, writes, month, groups, exists, cleanupMonths };
 }
 
 async function run(opts, context = {}) {
@@ -249,6 +257,16 @@ assertUntouched(await run({ preExisting: true }), 'B1');
   const r = await run({ preExisting: false });
   assert.ok(r.added.some(f => /snapshot read no category cells/.test(JSON.stringify(f))), `B5: an empty snapshot is a failure, got ${JSON.stringify(r.added)}`);
   assert.deepStrictEqual([...r.groups.keys()], ['grp-income'], 'B5: the disposable group was deleted');
+}
+
+{
+  const r = await run({ preExisting: true, goalTemplates: true, budgetMonths: ['2000-01', thisMonth] });
+  assert.deepStrictEqual(r.cleanupMonths, ['1999-01'], 'cleanup probes a month outside the budget');
+  assertUntouched(r, 'B6');
+}
+{
+  const r = await run({ preExisting: true, goalTemplates: true, budgetMonths: [] });
+  assert.deepStrictEqual(r.cleanupMonths, [], 'an empty month list never triggers a cleanup write');
 }
 
 console.log('manual_budget_no_borrowed_writes.test.js: all cases passed');

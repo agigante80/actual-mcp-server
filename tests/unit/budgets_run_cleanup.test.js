@@ -60,6 +60,14 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
     check((await call({ month: '2026-10' })).res?.result?.outcome === 'cleanup-up-to-date', 'up to date');
   }
 
+  {
+    prefs = ON;
+    reply = { type: 'error', message: 'cleanup-applied-with-errors', pre: 'Invalid cleanup instruction' };
+    const { res, err } = await call({ month: '2026-10' });
+    check(!res && /cleanup-applied-with-errors\nInvalid cleanup instruction/.test(err?.message ?? '')
+      && /Read the month before retrying/.test(err?.message ?? ''), 'cleanup errors reject and advise checking allocations', err?.message);
+  }
+
   console.log('\n[run-cleanup] NEGATIVE: refusals, nothing sent');
   for (const [p, input, re, kind] of [
     [{}, { month: '2026-10' }, /Budget templates are turned off.*Settings > Experimental features > Goal templates/, 'feature-disabled'],

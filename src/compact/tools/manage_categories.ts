@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { CommonSchemas } from '../../lib/schemas/common.js';
 import { AutomationSchema, CleanupSchema } from '../../lib/schemas/automations.js';
 import { asFields, atLeastOne, issue, needs, strict } from '../refine.js';
-import type { CompactActionRow, CompactRoute, CompactToolSpec } from '../types.js';
+import { FULL_SURFACE, type CompactActionRow, type CompactRoute, type CompactToolSpec, type DescriptionContext } from '../types.js';
 
 /**
  * manage_categories (#676): the compact front for the six category and category-group writers
@@ -105,21 +105,28 @@ const groupRoute = (legacy: string, fields: CompactActionRow['fields']): Compact
 const wrapped = { into: 'fields', top: ['id'] } as const;
 const groupWrapped = (legacy: string, fields: CompactActionRow['fields']): CompactRoute => ({ ...groupRoute(legacy, fields), wrap: wrapped });
 
-export const manageCategories: CompactToolSpec = {
-  name: 'manage_categories',
-  domain: 'Changing data',
-  summary: 'Create, change, delete or annotate budget categories and category groups.',
-  examplePrompt: 'Create a Pets category in the Everyday group.',
-  description:
+function describe(ctx: DescriptionContext): string {
+  return (
     'Create, change, delete or annotate budget categories and category groups; pick one `action`. Writes. ' +
     'To read or find ids use list_entities; budget amounts and month notes belong to manage_budget_months. Other fields are refused. ' +
     'entity (category or category_group) is required for create, update and delete. ' +
     'create: entity, name; a category also needs group_id (an unknown group is refused as not found) and takes is_income from that group (a different is_income is refused); a category_group may set is_income (true is refused when the budget already has an income group) and hidden. ' +
     'update: entity, id and at least one of name, group_id (category only; an unknown group is refused), is_income, hidden; is_income must match the group, so moving a category to a group with the other is_income needs both; prefer hidden true over delete to retire a category. ' +
     'delete: entity, id; DESTRUCTIVE, cannot be undone: a category is removed and its transactions are not moved (recategorize them first); deleting a group ALSO deletes every category in it (move them out first with update group_id). ' +
-    'set_automations: id, automations?, replace?, cleanup?; adds automations as Actual\'s automation editor saves them, keeping the existing ones (note #template lines are imported first; the note is unchanged and no longer read); replace drops them, replace with [] clears; not idempotent; each item needs only type (fixed, refill, percentage, schedule needs scheduleId, average, copy, by, remainder, limit, goal), other fields take the editor defaults (priority 1), amounts in cents; cleanup (#cleanup lines) replaces the end of month cleanup ([] clears, pools are created by name); needs goal templates and Budget automations UI on. ' +
+    (ctx.hasAction('set_automations') ? 'set_automations: id, automations?, replace?, cleanup?; adds automations as Actual\'s automation editor saves them, keeping the existing ones (note #template lines are imported first; the note is unchanged and no longer read); replace drops them, replace with [] clears; not idempotent; each item needs only type (fixed, refill, percentage, schedule needs scheduleId, average, copy, by, remainder, limit, goal), other fields take the editor defaults (priority 1), amounts in cents; cleanup (#cleanup lines) replaces the end of month cleanup ([] clears, pools are created by name); needs goal templates and Budget automations UI on. ' : '') +
     'set_note: id (a category or category group UUID), note ("" clears); not budget-YYYY-MM; an account note goes through manage_accounts and a payee note through manage_payees. ' +
-    'Returns { success, categoryId, message } (create category), { id, success } (create group), { success } (update, delete), { result: { success, id, note, cleared } } (set_note), { result: { success, categoryId, imported, count, cleanup? } } (set_automations).',
+    'Returns { success, categoryId, message } (create category), { id, success } (create group), { success } (update, delete), { result: { success, id, note, cleared } } (set_note)' +
+    (ctx.hasAction('set_automations') ? ', { result: { success, categoryId, imported, count, cleanup? } } (set_automations)' : '') + '.'
+  );
+}
+
+export const manageCategories: CompactToolSpec = {
+  name: 'manage_categories',
+  domain: 'Changing data',
+  summary: 'Create, change, delete or annotate budget categories and category groups.',
+  examplePrompt: 'Create a Pets category in the Everyday group.',
+  description: describe(FULL_SURFACE),
+  describeFor: describe,
   selector: 'action',
   actions: new Map<string, CompactActionRow>([
     ['create', { legacy: 'actual_categories_create', fields: createFields, drop: ['entity'], routes: [groupRoute('actual_category_groups_create', createGroupFields)] }],

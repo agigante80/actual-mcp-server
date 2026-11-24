@@ -19,6 +19,9 @@ export default createTool({
   }).strict(),
   handler: async ({ month }) => {
     const res = await adapter.runBudgetCleanup(month);
+    if (res?.type === 'error') {
+      throw new Error(`Read the month before retrying. End of month cleanup reported an error for ${month}: ${res.message}\n${res.pre ?? ''}`.trimEnd());
+    }
     return {
       success: true as const,
       month,

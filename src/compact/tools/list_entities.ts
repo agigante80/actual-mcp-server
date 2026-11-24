@@ -2,7 +2,7 @@ import { showDiscoveredBudgets } from '../../lib/budgetSelector.js';
 import { z } from 'zod';
 import { SCHEDULE_DATES_CAP } from '../../lib/constants.js';
 import { CommonSchemas } from '../../lib/schemas/common.js';
-import type { CompactActionRow, CompactRoute, CompactToolSpec } from '../types.js';
+import { FULL_SURFACE, type CompactActionRow, type CompactRoute, type CompactToolSpec, type DescriptionContext } from '../types.js';
 
 /**
  * list_entities (#672): the compact front for the sixteen list, lookup and search tools.
@@ -65,12 +65,8 @@ const nameRoute = (plural: string): CompactRoute => ({
 
 const row = (legacy: string, routes?: readonly CompactRoute[]): CompactActionRow => ({ legacy, fields: none, ...(routes ? { routes } : {}) });
 
-export const listEntities: CompactToolSpec = {
-  name: 'list_entities',
-  domain: 'Context and lookup',
-  summary: 'List or look up accounts, categories, payees, rules, schedules, tags, notes or budget files, and resolve a name to an id.',
-  examplePrompt: 'List my payees whose name contains Market.',
-  description:
+function describe(ctx: DescriptionContext): string {
+  return (
     'List, search or look up one entity type. For budget structure, server details or preferences use get_context.\n' +
     'Without filters, lists the type. Inapplicable fields are refused by name.\n' +
     'account, category, payee: query searches names; name resolves an exact match, refused with the candidate ids when several share it.\n' +
@@ -79,10 +75,20 @@ export const listEntities: CompactToolSpec = {
     'rule: payee_id to list that payee\'s rules.\n' +
     'tag: the tag list (colour, description); tags used only in notes are not listed.\n' +
     'note: requires id (an entity UUID or budget-YYYY-MM).\n' +
-    'category_automations: requires category_id; reads saved automations and cleanup or note directives, even with Goal templates off.\n' +
+    (ctx.hasAction('category_automations') ? 'category_automations: requires category_id; reads saved automations and cleanup or note directives, even with Goal templates off.\n' : '') +
     'budget_file: active true marks this session\'s budget.\n' +
     'name excludes query and schedule_id; sort must be used alone.\n' +
-    'Returns a list for account_group, category_group, and other unfiltered types; a query returns { matches, count, total, truncated }, a name returns the id, a schedule_id returns { schedule_id, name, dates, count, truncated }, and a note returns { found, id, note }.',
+    'Returns a list for account_group, category_group, and other unfiltered types; a query returns { matches, count, total, truncated }, a name returns the id, a schedule_id returns { schedule_id, name, dates, count, truncated }, and a note returns { found, id, note }.'
+  );
+}
+
+export const listEntities: CompactToolSpec = {
+  name: 'list_entities',
+  domain: 'Context and lookup',
+  summary: 'List or look up accounts, categories, payees, rules, schedules, tags, notes or budget files, and resolve a name to an id.',
+  examplePrompt: 'List my payees whose name contains Market.',
+  description: describe(FULL_SURFACE),
+  describeFor: describe,
   selector: 'type',
   actions: new Map<string, CompactActionRow>([
     ['account', row('actual_accounts_list', [searchRoute('accounts'), nameRoute('accounts')])],

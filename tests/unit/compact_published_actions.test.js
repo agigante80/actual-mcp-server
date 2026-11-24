@@ -238,6 +238,17 @@ await check('default surface (toolsets all): every action is published and the t
   for (const s of COMPACT_TOOLS) assert.strictEqual(s.describeFor ? s.describeFor(FULL_SURFACE) : s.description, s.description);
 });
 
+await check('category automation descriptions follow the published budget actions', async () => {
+  await open({ toolsets: 'context,structure' });
+  assert.ok(manager.policy.published.includes('list_entities'));
+  assert.ok(manager.policy.published.includes('manage_categories'));
+  assert.ok(!description('list_entities').includes('category_automations'));
+  assert.ok(!description('manage_categories').includes('set_automations'));
+  await open({ toolsets: 'context,structure,budget' });
+  assert.ok(description('list_entities').includes('category_automations'));
+  assert.ok(description('manage_categories').includes('set_automations'));
+});
+
 await check('MCP_READ_ONLY=true: the readers keep every action and name only published siblings', async () => {
   await open({ toolsets: 'all', readOnly: true });
   assert.deepStrictEqual(selectorValues('get_context'), ['structure', 'server', 'version', 'preferences']);
