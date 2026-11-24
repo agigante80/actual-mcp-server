@@ -706,6 +706,16 @@ class ActualConnectionPool {
       logger.debug(`[ConnectionPool] ${sessionId} was touched while waiting for the api lock; not evicting`);
       return;
     }
+    // #619: a session with a request still in flight is not idle, however old its last stamp is.
+    // beginRequest stamps once, at the START of a request, and a bank sync may now run for
+    // ACTUAL_BANK_SYNC_TIMEOUT_MS (default 5 minutes, the default idle window) while requests of
+    // other sessions wait behind it for the api lock. The re-check above runs when that lock is
+    // released, BEFORE endRequest has stamped the session again, so without this the sweep closed
+    // a session whose answer was about to be written. Same rule as the orphan sweep (#530).
+    if (opts.onlyIfExpired && this.inFlight.has(sessionId)) {
+      logger.debug(`[ConnectionPool] ${sessionId} has a request in flight; not evicting`);
+      return;
+    }
 
     if (!conn || !conn.initialized) {
       return;

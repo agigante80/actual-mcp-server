@@ -9,7 +9,10 @@
 //     (pooled and fallback path);
 //   - a call longer than the bank sync bound rejects naming ACTUAL_BANK_SYNC_TIMEOUT_MS, drops the
 //     pooled connection and is not followed by api.sync();
-//   - any other write through withActualApiWrite keeps the general bound.
+//   - any other write through withActualApiWrite keeps the general bound;
+//   - a queued write that waits behind a sync for longer than the general bound is rejected as
+//     never run (its client has likely given up, and a late write plus a retry is a duplicate),
+//     while one that waits less runs.
 
 process.env.ACTUAL_SERVER_URL     = process.env.ACTUAL_SERVER_URL     ?? 'http://localhost:5006';
 process.env.ACTUAL_BUDGET_SYNC_ID = process.env.ACTUAL_BUDGET_SYNC_ID ?? '00000000-0000-0000-0000-000000000000';
@@ -38,6 +41,9 @@ const REPORT = { newTransactions: ['n1'], matchedTransactions: [], updatedAccoun
   api.runBankSync = async (args) => syncImpl(args);
   api.sync = async () => { apiSyncCalls++; };
   api.shutdown = async () => {};
+  let rawPayeeCreates = 0;
+  api.createPayee = async () => { rawPayeeCreates++; return 'payee-619'; };
+  api.getPayees = async () => [];
 
   const adapterMod = await import('../../dist/src/lib/actual-adapter.js');
   const { default: config } = await import('../../dist/src/config.js');
@@ -90,6 +96,39 @@ const REPORT = { newTransactions: ['n1'], matchedTransactions: [], updatedAccoun
     const err = await pooled(() => errOf(() => adapterMod.withActualApiWrite(async () => { await sleep(700); return 1; })));
     check(/timed out after 300ms \(ACTUAL_OP_TIMEOUT_MS\)/.test(err?.message ?? ''), 'rejects naming the general knob', err?.message);
     check(!connectionPool.hasConnection(SID), 'the pooled connection is dropped');
+  }
+
+  console.log('\n[#619] negative: a queued write behind a 700 ms sync is rejected at the general bound, unrun');
+  {
+    prime();
+    rawPayeeCreates = 0;
+    syncImpl = async () => { await sleep(700); return REPORT; };
+    const syncDone = pooled(() => errOf(() => adapterMod.runBankSync(ACC)));
+    await sleep(30);
+    const started = Date.now();
+    const err = await pooled(() => errOf(() => adapterMod.createPayee({ name: 'Queued 619' })));
+    const took = Date.now() - started;
+    check(/^Write operation did not start within 300ms: .*\(ACTUAL_OP_TIMEOUT_MS\)\. The operation never ran and no data was modified\. Retry it\.$/.test(err?.message ?? ''),
+      'the queued write is rejected as never run', err?.message);
+    check(!/timed out/.test(err?.message ?? ''), 'and the message cannot be read as an infrastructure failure');
+    check(took >= 250 && took < 650, 'at the general bound, before the sync ends', String(took));
+    check((await syncDone) === undefined, 'the sync itself still resolves');
+    await sleep(150);
+    check(rawPayeeCreates === 0, 'the raw write never ran, also not after the lock was released', String(rawPayeeCreates));
+    check(connectionPool.hasConnection(SID), 'the pool entry is kept: nothing touched upstream');
+  }
+
+  console.log('\n[#619] positive: a queued write behind a 100 ms sync runs');
+  {
+    prime();
+    rawPayeeCreates = 0;
+    syncImpl = async () => { await sleep(100); return REPORT; };
+    const syncDone = pooled(() => errOf(() => adapterMod.runBankSync(ACC)));
+    await sleep(30);
+    const err = await pooled(() => errOf(() => adapterMod.createPayee({ name: 'Queued 619' })));
+    check(err === undefined, 'the queued write resolved', err?.message);
+    check(rawPayeeCreates === 1, 'its raw write ran once', String(rawPayeeCreates));
+    await syncDone;
   }
 
   console.log('\n[#619] positive (fallback path, no session): the same bound applies');
