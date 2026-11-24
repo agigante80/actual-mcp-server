@@ -383,7 +383,7 @@ actual-mcp-server/
 │   │   ├── registry.ts           # PromptDefinition, resolveOfferedPrompts, validators
 │   │   └── index.ts              # PROMPT_DEFINITIONS (one entry per prompt)
 │   │
-│   └── resources/                # MCP resources
+│   └── resources/                # Unshipped scaffolding: not registered, no resources capability
 │       └── accountsSummary.ts
 │
 ├── tests/                        # Tests
@@ -452,11 +452,11 @@ actual-mcp-server/
 5. Tool Registry Initialization
    └─> src/actualToolsManager.ts loads all tools
    └─> Validates tool schemas
-   └─> Registers 85 tools with MCP capabilities
+   └─> Registers 85 tools (15 published on the default compact surface)
 
 6. MCP Connection Setup
    └─> Create ActualMCPConnection instance
-   └─> Build capabilities object (tools, resources, prompts, completions)
+   └─> Build capabilities object (tools, prompts, completions)
 
 7. Transport Server Startup
    └─┾ Start HTTP server
