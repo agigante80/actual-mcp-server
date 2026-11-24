@@ -947,8 +947,19 @@ export async function withActualApi<T>(rawOperation: () => Promise<T>): Promise<
  * Pattern source: `processWriteQueue` already uses `api.sync()` between writes
  * within a batch (without shutdown), so this is the same proven approach
  * generalised to single-write call sites.
+ *
+ * #619: `bound` replaces the general ACTUAL_OP_TIMEOUT_MS for the OPERATION only, for a write
+ * that is long by nature (bank sync is the one caller). `knob` is the env variable the timeout
+ * message names. The trailing `api.sync()` keeps the general bound: it is a push to the Actual
+ * server, not the long call.
  */
-export async function withActualApiWrite<T>(operation: () => Promise<T>): Promise<T> {
+export async function withActualApiWrite<T>(
+  operation: () => Promise<T>,
+  bound?: { timeoutMs: number; knob: string; label: string },
+): Promise<T> {
+  const runBounded = () => bound
+    ? runAbandonable(operation, bound.label, bound.timeoutMs, bound.knob)
+    : runAbandonable(operation);
   // ACL enforcement BEFORE pool branching or lock acquisition (#156).
   _enforceBudgetAcl();
 
@@ -963,7 +974,7 @@ export async function withActualApiWrite<T>(operation: () => Promise<T>): Promis
         // Inside the lock, so no other session can change it in between.
         await ensureLoadedBudgetMatchesSession();
         // #800: a write, so a callback that outlives the bound must not write later.
-        const result = await runAbandonable(operation);
+        const result = await runBounded();
         // Propagate the write to the server so other clients (and our next
         // read) see it. Pre-#134 this happened implicitly via api.shutdown().
         try {
@@ -1003,7 +1014,7 @@ export async function withActualApiWrite<T>(operation: () => Promise<T>): Promis
     let forceFullShutdown = false;
     try {
       await initActualApiForOperation();
-      return await runAbandonable(operation);
+      return await runBounded();
     } catch (err) {
       // #419: force a full teardown on an infrastructure-level error so the next
       // stdio op re-inits fresh (see the read-path catch for the rationale).
@@ -5398,7 +5409,9 @@ export async function runBankSync(accountId?: string): Promise<BankSyncReport> {
     // mode withActualApiWrite pushes once after a RESOLVED sync and never in a rejection path;
     // on the fallback (init/op/shutdown) path, shutdown still syncs whatever a partial
     // all-accounts run imported before it failed. Not queueWriteOperation: bank sync is one
-    // upstream call, and the queue's per-call bound has no env knob, which #619 owns.
+    // upstream call that can run for minutes, and must not share a drain with other writes.
+    // #619: bounded by its own ACTUAL_BANK_SYNC_TIMEOUT_MS (passed at the end of this call),
+    // because the provider is legitimately slower than the general operation bound.
     return await withActualApiWrite(async () => {
       observability.incrementToolCall('actual.bank.sync').catch(() => {});
       // Bank sync must NOT be retried: retrying could import duplicate transactions.
@@ -5460,7 +5473,7 @@ export async function runBankSync(accountId?: string): Promise<BankSyncReport> {
       // Since 26.11 upstream awaits the provider and rejects this call itself, so the old
       // settle sleep and the process-wide unhandledRejection listener are gone (#548).
       return normaliseBankSyncReport(await rawRunBankSync(args as any));
-    });
+    }, { timeoutMs: config.ACTUAL_BANK_SYNC_TIMEOUT_MS, knob: 'ACTUAL_BANK_SYNC_TIMEOUT_MS', label: 'bank sync' });
   } catch (error: any) {
     // A typed refusal is already the caller-facing answer; the text mapping below would
     // rewrite "not configured" into a generic message and lose the brand.

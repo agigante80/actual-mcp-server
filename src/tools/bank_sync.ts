@@ -15,7 +15,7 @@ const tool: ToolDefinition = {
     'Refuses at once for a local, closed, half-linked or unknown account, or when no open account is linked. ' +
     'Reports what Actual reconciled: newTransactions (imported), matchedTransactions (existing ones updated) and updatedAccounts (accounts that received new transactions), ' +
     `each as { count, ids } with up to ${BANK_SYNC_IDS_CAP} ids (count is always the full total; truncated is true when any list was cut). ` +
-    'Never retried. A sync that runs past the server operation timeout reports "timed out" and may still have imported, so re-list transactions before retrying. ' +
+    'Never retried. A sync that runs past the server bank sync timeout reports "timed out" and may still have imported, so re-list transactions before retrying. ' +
     'An all-accounts sync that fails on one account may still have imported the others; those imports reach the Actual server with the next write in this session or when it closes, so other clients may not see them yet.',
 
   inputSchema: InputSchema,

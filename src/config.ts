@@ -83,6 +83,22 @@ export const configSchema = z.object({
     if (n === 0) return 0;
     return Math.min(Math.max(n, 250), 2147483647);
   }),
+  /**
+   * #619: a separate bound for BANK SYNC, the other operation that is long by nature.
+   *
+   * The provider call is awaited inside the api lock, and upstream's own bounds for it are longer
+   * than the general 30 seconds: SimpleFIN 60 s for one account and 300 s for a batch, Pluggy.ai
+   * 60 s, GoCardless none (@actual-app/api 26.11.0). At the general bound a sync upstream still
+   * considered healthy was reported as "timed out" while its import kept running. The default is
+   * upstream's longest own bound. Same parse and clamp as the two bounds above; 0 disables it,
+   * which lets one stalled provider hold the process-global api mutex indefinitely.
+   */
+  ACTUAL_BANK_SYNC_TIMEOUT_MS: z.string().default('300000').transform(val => {
+    const n = parseInt(val, 10);
+    if (!Number.isFinite(n) || n < 0) return 300000;
+    if (n === 0) return 0;
+    return Math.min(Math.max(n, 250), 2147483647);
+  }),
   // Escape hatch for #161: allow an http:// upstream even when an E2E encryption
   // password is set (e.g. an isolated Docker network where the hop is trusted).
   // Off by default so a plaintext upstream + encryption password is refused.

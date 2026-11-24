@@ -40,6 +40,7 @@ Legend for **Source**: `schema` = validated Zod key; `raw` = read directly from
 | `ALLOW_INSECURE_UPSTREAM` | bool string | `false` | No | no | schema | config | Allow `http://` upstream with an encryption password set (#161). Off by default so a plaintext upstream plus an encryption password is refused |
 | `ACTUAL_OP_TIMEOUT_MS` | int string (ms) | `30000` | No | no | schema | config; read at `actual-adapter.ts` `withOpTimeout` | Per-operation timeout bounding every upstream call (init, download, sync, op body) so a stall cannot hold the global API mutex forever (#270). `0` disables |
 | `ACTUAL_IMPORT_TIMEOUT_MS` | int string (ms) | `600000` | No | no | schema | config; read at `budgetLoader.ts` `importBudgetTracked` | Separate bound for a budget import, which is long by nature rather than stalled. An import is a tracked load, so every other session waits on it while it runs; the general operation bound made one tenant's import a process-wide stall (#407). `0` disables |
+| `ACTUAL_BANK_SYNC_TIMEOUT_MS` | int string (ms) | `300000` | No | no | schema | config; read at `actual-adapter.ts` `runBankSync` | Separate bound for bank sync, which waits on the bank provider and is slower than the general operation bound: upstream itself allows SimpleFIN 60 s for one account and 300 s for a batch (#619). While a sync runs, other requests wait for it, so a stalled provider can delay them for up to this long. A sync that times out may still have imported. `0` disables |
 
 ## MCP server
 
