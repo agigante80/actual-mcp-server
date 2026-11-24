@@ -342,9 +342,13 @@ case "$TEST_LEVEL" in
     info "  Refreshing the test budget's server snapshot (#595)..."
     # Every sync id the OIDC instance serves: the refresh refuses to write to any of them.
     # An unreadable OIDC container fails the run: an empty list would silently disable exit 3.
-    # Filtered inside the container, so its other secrets never reach this shell.
-    if ! OIDC_ENV=$(docker exec actual-mcp-server-backend sh -c \
-        "printenv | grep -E '^(ACTUAL_BUDGET_SYNC_ID|BUDGET_[0-9]+_SYNC_ID)=' || true"); then
+    # Read from the container's CONFIG (docker inspect), not from a shell inside it: the
+    # OIDC instance cannot start while its identity provider is down (it restart-loops,
+    # and `docker exec` then fails), yet its configured budgets are what must be protected.
+    # The grep is in the same pipeline, so its other secrets are never stored in this shell;
+    # pipefail makes a missing container fail the run.
+    if ! OIDC_ENV=$(docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' actual-mcp-server-backend \
+        | { grep -E '^(ACTUAL_BUDGET_SYNC_ID|BUDGET_[0-9]+_SYNC_ID)=' || true; }); then
       err "cannot read actual-mcp-server-backend's environment; test budget refresh not run"
       exit 1
     fi
