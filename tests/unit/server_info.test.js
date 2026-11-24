@@ -244,6 +244,15 @@ function assert(condition, message) {
     assert(!/\brequire\(|child_process/.test(toolSrc), 'server_info.ts has no require() and runs no git of its own');
   }
 
+  // --- #778: the package description carries no tool count (it goes stale: 85 operations, 15 published) ---
+  console.log('\n--- #778: package description names no tool count ---');
+  {
+    const { default: infoTool } = await import('../../dist/src/tools/server_info.js?desc=1');
+    const reported = (await infoTool.call({})).server.description;
+    assert(!/\b\d+ tools\b/.test(pkg.description), `package.json description has no "N tools" (got: ${pkg.description})`);
+    assert(!/\b\d+ tools\b/.test(reported), `the description server_info reports has no "N tools" (got: ${reported})`);
+  }
+
   // --- Summary ---
   console.log(`\nserver_info tests: ${passed} passed, ${failed} failed`);
   if (failed > 0) process.exit(1);
