@@ -129,40 +129,76 @@ export async function advancedTests(client, context, opts = {}) {
     fail(`search_by_amount failed: ${err.message}`);
   }
 
-  // search_transactions category (no filter: all categories)
+  // search_transactions category: the name is required since #756, so the call names an
+  // existing category and a second call without the name must be refused.
   console.log("\nSearching transactions by category (search_transactions category)...");
   try {
-    const byCategory = await callTool("search_transactions", {
-      by: "category",
-      start_date: monthStart,
-      end_date: today,
-    });
-    const transactions = byCategory?.transactions ?? byCategory?.result?.transactions ?? byCategory?.result ?? byCategory;
-    if (Array.isArray(transactions)) {
-      console.log(`  ✓ Verify search_by_category: returned ${transactions.length} transaction(s)`);
+    const listed = await callTool("list_entities", { type: "category" });
+    const name = (Array.isArray(listed) ? listed : (listed?.result ?? listed?.categories ?? [])).flatMap((c) => (Array.isArray(c?.categories) ? c.categories : [c])).find((c) => c?.name)?.name;
+    if (!name) {
+      skip("skip: no category in the budget to search by; search_by_category not exercised");
     } else {
-      fail(`Verify search_by_category: unexpected response: ${JSON.stringify(byCategory).slice(0, 120)}`);
+      const byCategory = await callTool("search_transactions", {
+        by: "category",
+        category_name: name,
+        start_date: monthStart,
+        end_date: today,
+      });
+      const transactions = byCategory?.transactions ?? byCategory?.result?.transactions ?? byCategory?.result ?? byCategory;
+      if (Array.isArray(transactions)) {
+        console.log(`  ✓ Verify search_by_category: returned ${transactions.length} transaction(s) for "${name}"`);
+      } else {
+        fail(`Verify search_by_category: unexpected response: ${JSON.stringify(byCategory).slice(0, 120)}`);
+      }
     }
   } catch (err) {
     fail(`search_by_category failed: ${err.message}`);
   }
+  try {
+    await callTool("search_transactions", { by: "category", start_date: monthStart, end_date: today });
+    fail("search_by_category without category_name: expected a refusal, the call succeeded");
+  } catch (err) {
+    if (String(err.message).includes("category_name: required for action: category")) {
+      console.log("  ✓ search_by_category without category_name is refused");
+    } else {
+      fail(`search_by_category without category_name: unexpected error: ${err.message}`);
+    }
+  }
 
-  // search_transactions payee (no filter: all payees)
+  // search_transactions payee: the name is required since #756, so the call names an
+  // existing payee and a second call without the name must be refused.
   console.log("\nSearching transactions by payee (search_transactions payee)...");
   try {
-    const byPayee = await callTool("search_transactions", {
-      by: "payee",
-      start_date: monthStart,
-      end_date: today,
-    });
-    const transactions = byPayee?.transactions ?? byPayee?.result?.transactions ?? byPayee?.result ?? byPayee;
-    if (Array.isArray(transactions)) {
-      console.log(`  ✓ Verify search_by_payee: returned ${transactions.length} transaction(s)`);
+    const listed = await callTool("list_entities", { type: "payee" });
+    const name = (Array.isArray(listed) ? listed : (listed?.result ?? listed?.payees ?? [])).find((p) => p?.name && !p.transfer_acct)?.name;
+    if (!name) {
+      skip("skip: no payee in the budget to search by; search_by_payee not exercised");
     } else {
-      fail(`Verify search_by_payee: unexpected response: ${JSON.stringify(byPayee).slice(0, 120)}`);
+      const byPayee = await callTool("search_transactions", {
+        by: "payee",
+        payee_name: name,
+        start_date: monthStart,
+        end_date: today,
+      });
+      const transactions = byPayee?.transactions ?? byPayee?.result?.transactions ?? byPayee?.result ?? byPayee;
+      if (Array.isArray(transactions)) {
+        console.log(`  ✓ Verify search_by_payee: returned ${transactions.length} transaction(s) for "${name}"`);
+      } else {
+        fail(`Verify search_by_payee: unexpected response: ${JSON.stringify(byPayee).slice(0, 120)}`);
+      }
     }
   } catch (err) {
     fail(`search_by_payee failed: ${err.message}`);
+  }
+  try {
+    await callTool("search_transactions", { by: "payee", start_date: monthStart, end_date: today });
+    fail("search_by_payee without payee_name: expected a refusal, the call succeeded");
+  } catch (err) {
+    if (String(err.message).includes("payee_name: required for action: payee")) {
+      console.log("  ✓ search_by_payee without payee_name is refused");
+    } else {
+      fail(`search_by_payee without payee_name: unexpected error: ${err.message}`);
+    }
   }
 
   // summarize_transactions by_category
