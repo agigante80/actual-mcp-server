@@ -188,7 +188,7 @@ Any other field is refused with the list of valid ones; `description` and `saved
 | Tool | Description |
 |------|-------------|
 | `actual_query_run` | Execute custom ActualQL query |
-| `actual_bank_sync` | Run bank sync (GoCardless/SimpleFIN) for one account or all linked open accounts; reports new, matched and updated counts with up to 100 ids each. A sync past the operation timeout reports "timed out" and may still have imported, so re-list before retrying; an all-accounts sync that fails on one account may still have imported the others, and those imports reach the Actual server with the next write in the session or when it closes. Refuses at once, with no provider call, for a local, closed, half-linked or unknown account, or when no open account is linked |
+| `actual_bank_sync` | Run bank sync (GoCardless/SimpleFIN) for one account or all linked open accounts; reports new, matched and updated counts with up to 100 ids each. A sync past the bank sync timeout (`ACTUAL_BANK_SYNC_TIMEOUT_MS`, 5 minutes by default) reports "timed out" and may still have imported, so re-list before retrying; an all-accounts sync that fails on one account may still have imported the others, and those imports reach the Actual server with the next write in the session or when it closes. Refuses at once, with no provider call, for a local, closed, half-linked or unknown account, or when no open account is linked |
 
 ## Batch Operations
 
