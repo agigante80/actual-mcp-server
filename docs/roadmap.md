@@ -138,10 +138,12 @@ A live review of the tag tools on 2026-11-21 found that they work but describe s
 Outcome (2026-11-21): done. All five tickets shipped in v0.33.0. The API does accept `hasTags` and `hasAnyTag`, on `notes` only, so #703 landed as planned, with one addition the plan did not foresee: a value with no tag in it is refused, because upstream would store it and a `hasTags` rule would then act on every transaction that has notes. Nothing was moved out of the phase.
 
 ## Phase: Compact surface verification
-state: open
+state: done
 plan: docs/plans/compact-surface-verification.md
 
 The compact surface (15 tools) became the default in v0.30.0 and the five MCP prompts shipped with it, and both have only been checked by the automated suites written alongside them. On 2026-11-23 the maintainer asked for an exhaustive hand test of every tool and prompt against a live server and the official Actual API documentation, with the findings fixed or ticketed. It comes now because every later change to the surface (#682, #705 to #708) builds on behaviour nobody has verified from the outside.
+
+Outcome (2026-11-24): done. All 62 tickets in the milestone closed as completed: the nine campaign tickets, and 53 findings fixed in v0.36.0 (52) and v0.36.1 (#800, a write that kept running after its operation had timed out). The findings were far more numerous than the plan expected, so related ones were batched into few pull requests on the maintainer's request rather than one each. Nothing was moved out of the phase. One line of "Done looks like" is not met: the tool by tool read of the Glama listing. Glama still lists v0.35.2 because the maintainer's browser profile was signed out, so the sync and the read wait for a sign in; it is a check, not code, and is carried in the session handoff rather than a ticket.
 
 ## Phase: Backlog
 state: backlog
