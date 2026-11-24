@@ -252,6 +252,7 @@ export async function dispatchCompact(
   input: unknown,
   names: ReadonlyMap<string, string> = legacyPhrases([spec]),
   listed?: readonly string[],
+  isAvailable?: (legacy: string) => boolean,
 ): Promise<unknown> {
   const { chosen, target, parsed } = planCall(spec, input, listed);
   const fields = fieldPhrases(target.rename);
@@ -261,7 +262,15 @@ export async function dispatchCompact(
   } catch (err) {
     rewriteError(err, names, fields);
     if (err instanceof ToolUnavailableError && err.scope === 'action' && hasSelector(spec) && listed && listed.length > 0) {
-      err.message = `${err.message} Enabled actions: ${listed.join(', ')}.`;
+      // A published action whose DEFAULT route is hidden but another route is enabled (list_entities
+      // payee under MCP_TOOLSETS=analysis): say which argument selects the enabled route instead of
+      // listing the action itself as enabled.
+      const row = spec.actions.get(chosen);
+      const open = isAvailable && row ? (row.routes ?? []).filter((r) => isAvailable(r.legacy)) : [];
+      err.message =
+        open.length > 0 && row && !isAvailable?.(row.legacy)
+          ? `${err.message} Only the ${chosen} call that sets ${open.map((r) => r.triggers.join(' or ')).join(' or ')} is enabled.`
+          : `${err.message} Enabled actions: ${listed.join(', ')}.`;
     }
     throw err;
   }
@@ -344,7 +353,15 @@ function compactInputSchema(spec: CompactToolSpec, listed?: readonly string[]): 
   if (withSelector) {
     // `listed` (#770): the schema still ACCEPTS every action, so a call to one the policy hides
     // reaches callOperation and is refused naming MCP_TOOLSETS; only the wording of a bad value narrows.
-    const selectorSchema = listed ? z.enum(names, { error: () => expectedOneOf(listed) }) : z.enum(names);
+    // The issue carries `values: listed`, so formatZodError (which prints issue.values) lists only the
+    // published actions too; a z.enum would keep every name in `values` whatever its message says.
+    const selectorSchema: z.ZodType = listed
+      ? z.unknown().superRefine((v, ctx) => {
+          if (typeof v !== 'string' || !names.includes(v)) {
+            ctx.addIssue({ code: 'invalid_value', values: [...listed], input: v, message: expectedOneOf(listed) });
+          }
+        })
+      : z.enum(names);
     shape[selector] = spec.defaultAction === undefined ? selectorSchema : selectorSchema.optional();
   }
   return z
@@ -411,7 +428,7 @@ export function buildCompactTool(
         spec.nullAsAbsent && args && typeof args === 'object' && !Array.isArray(args)
           ? Object.fromEntries(Object.entries(args).filter(([, value]) => value !== null))
           : (args ?? {});
-      return dispatchCompact(ops, spec, callSchema.parse(sent), names, listed);
+      return dispatchCompact(ops, spec, callSchema.parse(sent), names, listed, published?.isAvailable);
     },
   };
 }

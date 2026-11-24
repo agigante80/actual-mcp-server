@@ -1111,7 +1111,7 @@ This project follows a comprehensive testing strategy with multiple levels, from
 | `search_duplicate_names.test.js` | A category or payee name shared by several entities in the legacy searches (#802) | 19 |
 | `compact_summarize_transactions.test.js` | Compact `summarize_transactions`: six reports, refusals, schema shape, 4b rewrite (#673) | 44 |
 | `compact_description_layout.test.js` | Short-line layout of four compact descriptions: at least 3 lines, none over 400 characters, last line starts with Returns (#683) | 7 |
-| `compact_published_actions.test.js` | Narrowed compact tools under the chat preset: enum, text, refusals, read-only, full-surface identity (#770) | 12 |
+| `compact_published_actions.test.js` | Narrowed compact tools under the chat preset: enum, text, refusals, read-only, full-surface identity (#770) | 14 |
 | `summary_default_dates.test.js` | Default date range of the two summary tools is the local month to date, pinned to UTC+14 (#683) | 8 |
 | `summary_by_payee_filter_and_order.test.js` | The by_payee summary applies its account filter and keeps the largest spenders, largest first with a stable tie-break, and refuses a limit below 1 (#685, #686) | 10 |
 | `compact_list_budget_months.test.js` | Compact `list_budget_months`: month route, refusals, schema shape, 4b rewrite (#674) | 14 |
