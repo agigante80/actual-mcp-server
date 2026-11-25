@@ -89,7 +89,7 @@ Legend for **Source**: `schema` = validated Zod key; `raw` = read directly from
 
 | Name | Publishes | What it assumes |
 |------|-----------|-----------------|
-| `budget_automations` | `actual_categories_get_automations` (and `list_entities` with `type` `category_automations`), `actual_budgets_apply_templates` and `actual_budgets_run_cleanup` (and the `manage_budget_months` actions `apply_templates` and `run_cleanup`) | the internal handlers `budget/check-templates`, `budget/apply-goal-template`, `budget/overwrite-goal-template`, `budget/apply-single-template` and `budget/cleanup-goal-template` and their reply names, the `flags.goalTemplatesEnabled` preference, the stored `template_settings`, `goal_def` and `cleanup_def` columns, the `#template`, `#goal` and `#cleanup` note directives, and which currencies have no decimal places (IRR, JPY, KRW) |
+| `budget_automations` | `actual_categories_get_automations` (and `list_entities` with `type` `category_automations`), `actual_budgets_apply_templates` and `actual_budgets_run_cleanup` (and the `manage_budget_months` actions `apply_templates` and `run_cleanup`), and `actual_categories_set_automations` (and the `manage_categories` action `set_automations`) | the internal handlers `budget/check-templates`, `budget/apply-goal-template`, `budget/overwrite-goal-template`, `budget/apply-single-template`, `budget/cleanup-goal-template` and `budget/set-category-automations` and their reply names, the `flags.goalTemplatesEnabled` and `flags.goalTemplatesUIEnabled` preferences, the stored `template_settings`, `goal_def` and `cleanup_def` columns, the `#template`, `#goal` and `#cleanup` note directives, and which currencies have no decimal places (IRR, JPY, KRW) |
 
 ## Security / authentication
 

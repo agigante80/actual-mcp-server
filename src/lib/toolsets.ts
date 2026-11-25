@@ -92,6 +92,7 @@ export const TOOLSETS = {
     'actual_categories_get_automations',
     'actual_budgets_apply_templates',
     'actual_budgets_run_cleanup',
+    'actual_categories_set_automations',
   ],
   rules: [
     'actual_rules_get',
@@ -202,7 +203,7 @@ export const PRESET_NAMES = Object.keys(PRESETS) as PresetName[];
  * MCP_EXPERIMENTAL is a publication gate, not an authorisation control.
  */
 export const EXPERIMENTAL: Readonly<Record<string, readonly string[]>> = {
-  budget_automations: ['actual_categories_get_automations', 'actual_budgets_apply_templates', 'actual_budgets_run_cleanup'],
+  budget_automations: ['actual_categories_get_automations', 'actual_budgets_apply_templates', 'actual_budgets_run_cleanup', 'actual_categories_set_automations'],
 };
 export const EXPERIMENTAL_NAMES: readonly string[] = Object.keys(EXPERIMENTAL);
 
@@ -240,6 +241,7 @@ export const WRITE_CAPABLE: ReadonlySet<string> = new Set([
   'actual_budgets_import',
   'actual_budgets_reset_hold',
   'actual_budgets_run_cleanup',
+  'actual_categories_set_automations',
   'actual_budgets_set_amount',
   'actual_budgets_set_carryover',
   'actual_budgets_switch',

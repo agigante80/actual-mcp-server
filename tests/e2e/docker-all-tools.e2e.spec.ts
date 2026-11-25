@@ -5193,6 +5193,63 @@ test.describe('Docker E2E - compact manage_categories (#676)', () => {
     expect(again?.changes).toEqual([]);
   });
 
+  // #842: the automations save, part of budget_automations. It needs BOTH editor settings ON in the budget
+  // (tests/e2e/enable-goal-templates.mjs seeds them). Every row FAILS, never skips, when the action is absent.
+  const expectSetAutomations = async (mcp: any) => {
+    const tool = (await mcp.listTools()).find((t: any) => t.name === 'manage_categories');
+    expect(tool?.inputSchema?.properties?.action?.enum, 'the E2E stack must enable budget_automations').toContain('set_automations');
+  };
+  const PERIODIC_5000 = { type: 'periodic', amount: 5000, period: { period: 'month', amount: 1 }, starting: '2026-01-01' };
+
+  test('manage_categories set_automations - a saved periodic automation is read back and applied (#842)', async ({ mcp, makeCategory, cleanup }) => {
+    await expectSetAutomations(mcp);
+    const category = await makeCategory();
+    cleanup.add(CLEANUP_ORDER.budgetHold, `restore budget of category ${category.id}`, async () => {
+      await mcp.call('manage_budget_months', { action: 'set_amount', month: currentMonth(), category_id: category.id, amount: 0 }).catch(() => undefined);
+    });
+    cleanup.add(CLEANUP_ORDER.note, `automations of ${category.id}`, async () => {
+      await mcp.call('manage_categories', { action: 'set_automations', id: category.id, automations: [] }).catch(() => undefined);
+    });
+    const saved = await mcp.call('manage_categories', { action: 'set_automations', id: category.id, automations: [PERIODIC_5000] });
+    expect(saved?.verified).toBe(true);
+    expect(saved?.source).toBe('ui');
+    const read = await mcp.call('list_entities', { type: 'category_automations', category_id: category.id });
+    expect(read?.source).toBe('ui');
+    expect(read?.automations?.[0]?.amount).toBe(5000);
+    const applied = await mcp.call('manage_budget_months', { action: 'apply_templates', month: currentMonth(), category_id: category.id, overwrite: true });
+    expect(applied?.changes).toEqual([expect.objectContaining({ categoryId: category.id, before: 0, after: 5000 })]);
+  });
+
+  test('manage_categories set_automations - a note-managed category needs confirm_note_switch (#842)', async ({ mcp, makeCategory, cleanup }) => {
+    await expectSetAutomations(mcp);
+    const category = await makeCategory();
+    cleanup.add(CLEANUP_ORDER.budgetHold, `restore budget of category ${category.id}`, async () => {
+      await mcp.call('manage_budget_months', { action: 'set_amount', month: currentMonth(), category_id: category.id, amount: 0 }).catch(() => undefined);
+    });
+    cleanup.add(CLEANUP_ORDER.note, `note and automations of ${category.id}`, async () => {
+      await mcp.call('manage_categories', { action: 'set_automations', id: category.id, automations: [] }).catch(() => undefined);
+      await mcp.call('manage_categories', { action: 'set_note', id: category.id, note: '' }).catch(() => undefined);
+    });
+    await mcp.call('manage_categories', { action: 'set_note', id: category.id, note: '#template 50' });
+    const seven = { ...PERIODIC_5000, amount: 7000 };
+    expect(await refusal(() => mcp.call('manage_categories', { action: 'set_automations', id: category.id, automations: [seven] }))).toMatch(/confirm_note_switch/);
+    const saved = await mcp.call('manage_categories', { action: 'set_automations', id: category.id, automations: [seven], confirm_note_switch: true });
+    expect(saved?.source).toBe('ui');
+    const applied = await mcp.call('manage_budget_months', { action: 'apply_templates', month: currentMonth(), category_id: category.id, overwrite: true });
+    expect(applied?.changes).toEqual([expect.objectContaining({ categoryId: category.id, before: 0, after: 7000 })]);
+  });
+
+  test('manage_categories set_automations - ERROR: unknown category, unknown type, two limits and a source field are refused (#842)', async ({ mcp, makeCategory }) => {
+    await expectSetAutomations(mcp);
+    const category = await makeCategory();
+    const zero = '00000000-0000-4000-8000-000000000000';
+    const limit = { type: 'limit', amount: 100, period: 'monthly' };
+    expect(await refusal(() => mcp.call('manage_categories', { action: 'set_automations', id: zero, automations: [] }))).toMatch(/not found/i);
+    expect(await refusal(() => mcp.call('manage_categories', { action: 'set_automations', id: category.id, automations: [{ type: 'nope' }] }))).toMatch(/type/);
+    expect(await refusal(() => mcp.call('manage_categories', { action: 'set_automations', id: category.id, automations: [limit, limit] }))).toMatch(/only one limit/);
+    expect(await refusal(() => mcp.call('manage_categories', { action: 'set_automations', id: category.id, automations: [], source: 'notes' }))).toMatch(/Unrecognized|source/);
+  });
+
   test('manage_categories - ERROR: missing entity, missing group_id, hidden on a category and an empty update', async ({ mcp }) => {
     const id = '00000000-0000-4000-8000-000000000000';
     expect(await refusal(() => mcp.call('manage_categories', { action: 'create', name: 'x' }))).toMatch(/entity/);
@@ -6759,6 +6816,29 @@ test.describe('legacy smoke (MCP_TOOL_SURFACE=all)', () => {
     const cleaned = await mcp.call('actual_budgets_run_cleanup', { month: currentMonth() });
     expect(typeof cleaned?.verified).toBe('boolean');
     expect(await refusal(() => mcp.call('actual_budgets_run_cleanup', { month: '1899-01' }))).toMatch(/outside this budget's range/);
+  });
+
+  // #842: the legacy tool behind manage_categories set_automations; published only with MCP_EXPERIMENTAL.
+  test('actual_categories_set_automations - saves and reads back, refuses an unknown id and an unconfirmed note switch (#842)', async ({ mcp, makeCategory, cleanup }) => {
+    const names = (await mcp.listTools()).map((t: any) => t.name);
+    expect(names, 'the E2E stack must enable budget_automations').toContain('actual_categories_set_automations');
+    const category = await makeCategory();
+    cleanup.add(CLEANUP_ORDER.note, `note and automations of ${category.id}`, async () => {
+      await mcp.call('actual_categories_set_automations', { categoryId: category.id, automations: [] }).catch(() => undefined);
+      await mcp.call('actual_notes_update', { id: category.id, note: '' }).catch(() => undefined);
+    });
+    const saved = await mcp.call('actual_categories_set_automations', { categoryId: category.id, automations: [{ type: 'goal', amount: 100000 }] });
+    expect(saved?.verified).toBe(true);
+    const read = await mcp.call('actual_categories_get_automations', { categoryId: category.id });
+    expect(read?.source).toBe('ui');
+    expect(read?.automations?.[0]?.amount).toBe(100000);
+    expect(await refusal(() => mcp.call('actual_categories_set_automations', { categoryId: '00000000-0000-4000-8000-000000000000', automations: [] }))).toMatch(/not found/i);
+    await mcp.call('actual_categories_set_automations', { categoryId: category.id, automations: [] });
+    await mcp.call('actual_notes_update', { id: category.id, note: '#template 50' });
+    const reset = await mcp.call('actual_categories_get_automations', { categoryId: category.id });
+    if (reset?.source === 'notes') {
+      expect(await refusal(() => mcp.call('actual_categories_set_automations', { categoryId: category.id, automations: [] }))).toMatch(/confirmNoteSwitch/);
+    }
   });
 
   test('actual_entities_search - finds a seeded payee and returns nothing for a nonsense query', async ({ mcp, makePayee }) => {

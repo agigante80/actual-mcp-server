@@ -62,14 +62,14 @@ Because all three prompts run in the **same chat session**, the AI retains:
 | 7 | Prompt 3 | 5 | `summarize_transactions` reports by_category, by_payee, grouped, account_flow, recurring (#451) |
 | 8 | Prompt 3 | 13 | Budget management: `manage_budget_months`, `manage_budget_files`, `list_budget_months`; experimental `manage_budget_months` actions `apply_templates` and `run_cleanup` (#841, negatives only, skipped unless MCP_EXPERIMENTAL names budget_automations) |
 | 9 | Prompt 3 | 2 | Advanced query + bank sync: `run_query`, `manage_accounts` action bank_sync |
-| 9b | Prompt 3 | 3 | Notes (get + set): `list_entities` type note, the `set_note` actions; experimental `list_entities` type category_automations (#840, skipped unless MCP_EXPERIMENTAL names budget_automations) |
+| 9b | Prompt 3 | 4 | Notes (get + set): `list_entities` type note, the `set_note` actions; experimental `list_entities` type category_automations (#840) and `manage_categories` action `set_automations` (#842, negatives only), both skipped unless MCP_EXPERIMENTAL names budget_automations |
 | 9c | Prompt 3 | 1 | Preferences (synced display settings, #333): `get_context` topic preferences |
 | 9d | Prompt 3 | 2 | Budget export + import round trip (#332/#334). **Import half needs a disposable budget**: it adds a new budget file to the server that no tool here can remove |
 | 10 | Prompt 3 | 2 | Session management (`actual_session_list`, `actual_session_close`). **Legacy or all surface only**: the block is skipped on compact, so it is counted separately from the compact total |
 | 11 | Prompt 3 |  | Concurrency (optional, skipped by default) |
 | 12 | Prompt 3 |  | Full cleanup |
 
-**Total: 91 tools across 3 prompts**
+**Total: 92 tools across 3 prompts**
 
 The 91 nominal operations include the 2 session operations of Phase 10. On the compact surface that
 block is skipped, so a compact run reaches at most 89.

@@ -43,7 +43,7 @@ const { outputJsonSchema } = await import('../../dist/src/lib/tool-output.js');
 
 const GATED = 'actual_categories_get_automations';
 // #841: the feature now gates the read tool and the two template writes.
-const FEATURE_TOOLS = [GATED, 'actual_budgets_apply_templates', 'actual_budgets_run_cleanup'];
+const FEATURE_TOOLS = [GATED, 'actual_budgets_apply_templates', 'actual_budgets_run_cleanup', 'actual_categories_set_automations'];
 const FEATURE = 'budget_automations';
 const ALL = { toolsets: 'all', tools: '', readOnly: false };
 

@@ -31,6 +31,7 @@ const ALLOWED = [
   'budget/overwrite-goal-template',
   'budget/apply-single-template',
   'budget/cleanup-goal-template',
+  'budget/set-category-automations',
 ];
 const rejected = (name) => `Internal handler "${name}" is not on this server's allow-list.`;
 

@@ -100,6 +100,7 @@ On `manage_accounts` and `manage_categories`, `entity` is required for `create`,
 | `actual_categories_get_automations` | `list_entities` (`type: "category_automations"`) | `category_id` is sent as `categoryId` |
 | `actual_budgets_apply_templates` | `manage_budget_months` (`action: "apply_templates"`) | `category_id` is sent as `categoryId` |
 | `actual_budgets_run_cleanup` | `manage_budget_months` (`action: "run_cleanup"`) | none |
+| `actual_categories_set_automations` | `manage_categories` (`action: "set_automations"`) | `id` is sent as `categoryId`; `confirm_note_switch` is sent as `confirmNoteSwitch` |
 | `actual_budgets_export` | `manage_budget_files` (`action: "export"`) | none |
 | `actual_budgets_import` | `manage_budget_files` (`action: "import"`) | none |
 | `actual_preferences_get` | `get_context` (`topic: "preferences"`) | none |

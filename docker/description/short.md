@@ -1,1 +1,1 @@
-Actual Budget MCP server: 15 tools over 88 operations, HTTP + stdio, LibreChat and Claude Desktop
+Actual Budget MCP server: 15 tools over 89 operations, HTTP + stdio, LibreChat and Claude Desktop

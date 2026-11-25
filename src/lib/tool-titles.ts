@@ -35,6 +35,7 @@ export const TOOL_TITLES: Readonly<Record<string, string>> = {
   actual_budgets_get_month: 'Get budget month',
   actual_budgets_apply_templates: 'Apply budget templates (experimental)',
   actual_budgets_run_cleanup: 'Clean up budget month (experimental)',
+  actual_categories_set_automations: 'Set category automations (experimental)',
   actual_budgets_get_months: 'List budget months',
   actual_budgets_get_all: 'List budget files',
   actual_budgets_hold_for_next_month: 'Hold budget for next month',
