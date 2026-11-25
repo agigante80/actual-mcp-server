@@ -1,7 +1,8 @@
 # 0003. Tools on an experimental upstream surface are published only when named in one list variable, MCP_EXPERIMENTAL
 
-- Status: accepted
+- Status: superseded
 - Date: 2026-11-25
+- Superseded by: 0004
 
 ## Context
 
