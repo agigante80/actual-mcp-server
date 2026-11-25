@@ -46,6 +46,7 @@ export const TOOL_TITLES: Readonly<Record<string, string>> = {
   actual_categories_create: 'Create category',
   actual_categories_delete: 'Delete category',
   actual_categories_get: 'List categories',
+  actual_categories_get_automations: 'Get category automations (experimental)',
   actual_categories_update: 'Update category',
   actual_category_groups_create: 'Create category group',
   actual_category_groups_delete: 'Delete category group',

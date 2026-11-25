@@ -73,6 +73,8 @@ Which tools a client actually sees depends on `MCP_TOOLSETS`, `MCP_TOOLS`, `MCP_
 
 `actual_categories_get` · `actual_categories_create` · `actual_categories_update` · `actual_categories_delete`
 
+`actual_categories_get_automations` (experimental, published only with `MCP_EXPERIMENTAL=budget_automations`; compact: `list_entities` with `type` `category_automations` and `category_id`): reads one category's budget automations (Goal templates) and cleanup roles without writing. A category the editor manages (`source` `ui`) returns its `automations` in Actual's field names with money fields as integer minor units of the budget currency, plus `errors` for a stored entry that is malformed or of an unknown type; a category managed by notes (`source` `notes`) returns its `noteDirectives` (the `#template`, `#goal` and `#cleanup` lines as written). An unknown `categoryId` is refused. It reads internals of `@actual-app/api` that can change in any release.
+
 Creating or moving a category (`actual_categories_create`, `actual_categories_update`) with a `group_id` that is no category group is refused with a not-found refusal; nothing is written.
 
 A category takes its group's `is_income` when none is given (a category created in an income group is an income category). An `is_income` that contradicts the group is refused with a conflict refusal, and so is a move to a group of the other kind without `is_income`; pass `is_income` together with `group_id` to change both. Nothing is written in either case.

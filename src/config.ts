@@ -235,6 +235,12 @@ export const configSchema = z.object({
       return z.NEVER;
     }),
 
+  // MCP_EXPERIMENTAL (ADR 0003, ADR 0004): comma list of experimental upstream features this
+  // process enables; empty (the default) enables none. A tool of a feature that is not named is
+  // neither published nor callable. Names are validated against the EXPERIMENTAL table by
+  // resolvePublishedToolNames (src/lib/toolsets.ts), where an unknown name aborts startup.
+  MCP_EXPERIMENTAL: z.string().default(''),
+
   // MCP_TOOL_SURFACE (#671) picks WHICH list of tools this process publishes: the compact
   // registry ('compact', the default since #680), the 85 legacy tools ('legacy', the opt-out),
   // or both ('all', for the test stacks). Trimmed and case-insensitive; anything else refuses startup naming the

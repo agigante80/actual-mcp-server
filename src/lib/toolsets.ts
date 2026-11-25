@@ -89,6 +89,7 @@ export const TOOLSETS = {
     'actual_budget_updates_batch',
     'actual_notes_get',
     'actual_notes_update',
+    'actual_categories_get_automations',
   ],
   rules: [
     'actual_rules_get',
@@ -192,6 +193,23 @@ export type PresetName = keyof typeof PRESETS;
 export const PRESET_NAMES = Object.keys(PRESETS) as PresetName[];
 
 /**
+ * Experimental upstream surfaces (ADR 0003, ADR 0004): feature name to the legacy tools that
+ * belong to it. A tool listed here is NOT published and is refused unless its feature is named
+ * in MCP_EXPERIMENTAL, whatever MCP_TOOLSETS selects. The tool still belongs to exactly one
+ * toolset above; this table only adds the opt-in. Graduation of a feature is deleting its row.
+ * MCP_EXPERIMENTAL is a publication gate, not an authorisation control.
+ */
+export const EXPERIMENTAL: Readonly<Record<string, readonly string[]>> = {
+  budget_automations: ['actual_categories_get_automations'],
+};
+export const EXPERIMENTAL_NAMES: readonly string[] = Object.keys(EXPERIMENTAL);
+
+/** The experimental feature a legacy tool belongs to, or undefined for an ordinary tool. */
+export function experimentalFeatureOf(tool: string): string | undefined {
+  return EXPERIMENTAL_NAMES.find((feature) => EXPERIMENTAL[feature]!.includes(tool));
+}
+
+/**
  * Every tool that can change a budget or server state, for MCP_READ_ONLY.
  *
  * Derived by hand from the adapter call graph: the 43 tools whose adapter path reaches
@@ -262,6 +280,8 @@ export interface ToolsetSettings {
   tools: string;
   /** MCP_READ_ONLY, already parsed by configSchema. */
   readOnly: boolean;
+  /** MCP_EXPERIMENTAL: comma list of enabled experimental feature names. Empty or omitted means none. */
+  experimental?: string;
   /** MCP_TOOL_SURFACE (#671). Optional: a three-field caller (the pure unit tests) gets `legacy`; the server always passes the validated config value, `compact` by default. */
   surface?: ToolSurface;
 }
@@ -299,6 +319,8 @@ export interface PublishedPolicy {
     readonly tools: readonly string[];
     readonly readOnly: boolean;
     readonly surface: ToolSurface;
+    /** The enabled experimental feature names (empty by default). */
+    readonly experimental: readonly string[];
   };
 }
 
@@ -313,6 +335,7 @@ interface LegacyResolution {
   /** Legacy names MCP_TOOLSETS and MCP_TOOLS select, before MCP_READ_ONLY is applied. */
   readonly selected: ReadonlySet<string>;
   readonly mappedAliases: { alias: string; tool: string }[];
+  readonly experimental: readonly string[];
 }
 
 /**
@@ -324,13 +347,22 @@ interface LegacyResolution {
 function resolveLegacy(registeredNames: readonly string[], settings: ToolsetSettings): LegacyResolution {
   const registered = new Set(registeredNames);
   // A table naming a tool the registry lacks would advertise something that cannot run.
-  for (const [kind, table] of [['Toolset', TOOLSETS], ['Preset', PRESETS]] as const) {
+  for (const [kind, table] of [['Toolset', TOOLSETS], ['Preset', PRESETS], ['Experimental feature', EXPERIMENTAL]] as const) {
     for (const [name, members] of Object.entries(table) as [string, readonly string[]][]) {
       const missing = members.filter((m) => !registered.has(m));
       if (missing.length > 0) {
         throw new Error(`${kind} "${name}" names tools that are not registered: ${missing.join(', ')}`);
       }
     }
+  }
+
+  const enabledFeatures = [...new Set(splitList(settings.experimental ?? ''))];
+  const unknownFeatures = enabledFeatures.filter((f) => !EXPERIMENTAL_NAMES.includes(f));
+  if (unknownFeatures.length > 0) {
+    throw new Error(
+      `Unknown name in MCP_EXPERIMENTAL: ${unknownFeatures.map((f) => `"${f}"`).join(', ')}. ` +
+        `Valid names: ${EXPERIMENTAL_NAMES.join(', ')}`,
+    );
   }
 
   const validToolsets = ['all', ...TOOLSET_NAMES, ...PRESET_NAMES];
@@ -365,6 +397,18 @@ function resolveLegacy(registeredNames: readonly string[], settings: ToolsetSett
     );
   }
 
+  const gatedNames = extras.filter((t) => {
+    const feature = experimentalFeatureOf(t);
+    return feature !== undefined && !enabledFeatures.includes(feature);
+  });
+  if (gatedNames.length > 0) {
+    throw new Error(
+      gatedNames
+        .map((t) => `MCP_TOOLS names "${t}", which belongs to the experimental feature "${experimentalFeatureOf(t)}". Add it to MCP_EXPERIMENTAL to publish it.`)
+        .join(' '),
+    );
+  }
+
   const selected = new Set<string>();
   if (requested.includes('all')) {
     registeredNames.forEach((n) => selected.add(n));
@@ -375,6 +419,13 @@ function resolveLegacy(registeredNames: readonly string[], settings: ToolsetSett
     }
   }
   extras.forEach((n) => selected.add(n));
+  // A tool of a feature that is not enabled leaves `selected` whatever put it there (MCP_TOOLSETS=all
+  // selects every registered name), so no selection path can publish it.
+  const gatedOff = new Set<string>();
+  for (const feature of EXPERIMENTAL_NAMES) {
+    if (!enabledFeatures.includes(feature)) EXPERIMENTAL[feature]!.forEach((n) => gatedOff.add(n));
+  }
+  gatedOff.forEach((n) => selected.delete(n));
 
   const published: string[] = [];
   const hidden = new Map<string, ToolUnavailableSetting>();
@@ -382,11 +433,14 @@ function resolveLegacy(registeredNames: readonly string[], settings: ToolsetSett
     // Read-only is checked FIRST: while it is on, adding a writer to MCP_TOOLSETS or MCP_TOOLS
     // cannot publish it, so MCP_READ_ONLY is the setting to change first when both hide a tool.
     if (settings.readOnly && WRITE_CAPABLE.has(name)) hidden.set(name, 'MCP_READ_ONLY');
+    // Its own reason, never MCP_TOOLSETS: a compact MCP_TOOLS entry waives an MCP_TOOLSETS hide,
+    // which would let the compact action run with the feature off.
+    else if (gatedOff.has(name)) hidden.set(name, 'MCP_EXPERIMENTAL');
     else if (!selected.has(name)) hidden.set(name, 'MCP_TOOLSETS');
     else published.push(name);
   }
 
-  return { published, hidden, requested, extras, selected, mappedAliases };
+  return { published, hidden, requested, extras, selected, mappedAliases, experimental: enabledFeatures };
 }
 
 /**
@@ -512,6 +566,7 @@ export function resolvePublishedToolNames(
       tools: Object.freeze(surface === 'compact' ? compactExtras : legacy.extras),
       readOnly: settings.readOnly,
       surface,
+      experimental: Object.freeze(legacy.experimental),
     }),
   });
 }
@@ -530,7 +585,7 @@ export function unavailableError(policy: PublishedPolicy, tool: string): ToolUna
   if (reason === 'MCP_TOOLSETS' && policy.settings?.surface === 'compact' && tool.startsWith('actual_')) {
     return new ToolUnavailableError(tool, 'MCP_TOOL_SURFACE', 'compact');
   }
-  return new ToolUnavailableError(tool, reason, policy.settings?.surface);
+  return new ToolUnavailableError(tool, reason, policy.settings?.surface, 'tool', experimentalFeatureOf(tool));
 }
 
 /**
@@ -560,7 +615,7 @@ export function operationUnavailableError(
   if (policy.published.includes(tool)) return undefined;
   const reason = policy.hidden.get(tool) ?? 'MCP_TOOLSETS';
   if (reason === 'MCP_TOOL_SURFACE' && policy.settings?.surface === 'compact') return undefined;
-  return new ToolUnavailableError(tool, reason, policy.settings?.surface, via ? 'action' : 'tool');
+  return new ToolUnavailableError(tool, reason, policy.settings?.surface, via ? 'action' : 'tool', experimentalFeatureOf(tool));
 }
 
 /**

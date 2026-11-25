@@ -25,7 +25,7 @@ import { join } from 'path';
 process.env.ACTUAL_SERVER_URL ??= 'http://127.0.0.1:5999';
 process.env.ACTUAL_PASSWORD ??= 'dummy';
 process.env.ACTUAL_BUDGET_SYNC_ID ??= '00000000-0000-0000-0000-000000000000';
-for (const k of ['MCP_TOOLSETS', 'MCP_TOOLS', 'MCP_READ_ONLY', 'MCP_TOOL_SURFACE']) delete process.env[k];
+for (const k of ['MCP_TOOLSETS', 'MCP_TOOLS', 'MCP_READ_ONLY', 'MCP_TOOL_SURFACE', 'MCP_EXPERIMENTAL']) delete process.env[k];
 
 let passed = 0;
 let failed = 0;
@@ -37,7 +37,7 @@ async function check(label, fn) {
 console.log('\n[compact-dispatch]');
 
 const { z } = await import('zod');
-const { resolvePublishedToolNames, WRITE_CAPABLE } = await import('../../dist/src/lib/toolsets.js');
+const { resolvePublishedToolNames, WRITE_CAPABLE, EXPERIMENTAL } = await import('../../dist/src/lib/toolsets.js');
 const { ToolUnavailableError } = await import('../../dist/src/lib/errors.js');
 const { dispatchCompact, buildCompactTool, compactLegacyNames, legacyPhrases } = await import('../../dist/src/compact/dispatch.js');
 const { NotFoundRefusal, isPreflightRefusal } = await import('../../dist/src/lib/errors.js');
@@ -75,6 +75,10 @@ const withDefault = { ...readerOnly, name: 'actual_fixture_default', defaultActi
 const ALL = { toolsets: 'all', tools: '', readOnly: false };
 await manager.initialize(ALL);
 const legacyNames = manager.getToolNames();
+// #840: a tool gated by MCP_EXPERIMENTAL is registered but published on no surface while its feature
+// is unnamed, so "the legacy list" is the registry minus the gated tools.
+const gatedNames = new Set(Object.values(EXPERIMENTAL).flat());
+const ungatedLegacy = legacyNames.filter((n) => !gatedNames.has(n));
 
 // Stub the legacy tools' call; every stub records what it was handed.
 const calls = [];
@@ -96,7 +100,7 @@ const reason = async (fn) => { try { await fn(); } catch (e) { return e; } retur
 
 await check('legacy surface (default): compact hidden for MCP_TOOL_SURFACE, legacy list unchanged', () => {
   const p = resolveWith({});
-  assert.deepStrictEqual([...p.published], legacyNames);
+  assert.deepStrictEqual([...p.published], ungatedLegacy);
   assert.strictEqual(p.hidden.get(spec.name), 'MCP_TOOL_SURFACE');
   assert.strictEqual(p.registered, legacyNames.length + 1);
   assert.strictEqual(p.settings.surface, 'legacy');
@@ -105,12 +109,12 @@ await check('legacy surface (default): compact hidden for MCP_TOOL_SURFACE, lega
 await check('compact surface: only the compact tool published, every legacy tool hidden for MCP_TOOL_SURFACE', () => {
   const p = resolveWith({ surface: 'compact' });
   assert.deepStrictEqual([...p.published], [spec.name]);
-  for (const n of legacyNames) assert.strictEqual(p.hidden.get(n), 'MCP_TOOL_SURFACE', n);
+  for (const n of legacyNames) assert.strictEqual(p.hidden.get(n), gatedNames.has(n) ? 'MCP_EXPERIMENTAL' : 'MCP_TOOL_SURFACE', n);
 });
 
 await check('all surface: legacy first, then compact', () => {
   const p = resolveWith({ surface: 'all' });
-  assert.deepStrictEqual([...p.published], [...legacyNames, spec.name]);
+  assert.deepStrictEqual([...p.published], [...ungatedLegacy, spec.name]);
 });
 
 await check('all surface: MCP_TOOLSETS narrows the legacy names and never hides a compact tool', () => {

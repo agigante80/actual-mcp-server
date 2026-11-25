@@ -91,6 +91,8 @@ Use this to check server status, verify version compatibility, or debug issues.`
         registered: facts.tools.registered,
         policy,
       },
+      // The enabled MCP_EXPERIMENTAL feature names: empty by default.
+      experimental: actualToolsManager.getExperimentalFeatures(),
     };
   },
 };

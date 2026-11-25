@@ -59,7 +59,7 @@ const baseEnv = () => {
     ACTUAL_DATA_DIR: DATA_DIR,
     LOG_LEVEL: 'error',
   };
-  for (const k of ['MCP_TOOLSETS', 'MCP_TOOLS', 'MCP_READ_ONLY', 'MCP_TOOL_SURFACE']) delete env[k];
+  for (const k of ['MCP_TOOLSETS', 'MCP_TOOLS', 'MCP_READ_ONLY', 'MCP_TOOL_SURFACE', 'MCP_EXPERIMENTAL']) delete env[k];
   return env;
 };
 
@@ -198,7 +198,10 @@ await check('stdio: legacy surface with unset toolsets lists the whole registry'
   await registryManager.initialize({ toolsets: '', tools: '', readOnly: false });
   const registry = registryManager.getToolNames();
   assert.ok(registry.length > 0);
-  assert.deepStrictEqual([...names].sort(), [...registry].sort());
+  // #840: the registry minus the tools gated by MCP_EXPERIMENTAL (unset here, so none is published).
+  const { EXPERIMENTAL } = await import('../../dist/src/lib/toolsets.js');
+  const gated = new Set(Object.values(EXPERIMENTAL).flat());
+  assert.deepStrictEqual([...names].sort(), registry.filter((n) => !gated.has(n)).sort());
 });
 
 // ---------------------------------------------------------------- startup failures

@@ -181,7 +181,7 @@ const EXPECTED_DEFAULT_KEYS = [
   'ACTUAL_BANK_SYNC_TIMEOUT_MS', 'ACTUAL_EXPORT_DIR', 'ACTUAL_IMPORT_TIMEOUT_MS', 'ACTUAL_OP_TIMEOUT_MS', 'ACTUAL_PASSWORD',
   'AUTH_BUDGET_ACL_CLAIM', 'AUTH_BUDGET_ACL_IDENTITY_MAP', 'AUTH_BUDGET_ACL_IDENTITY_SOURCE',
   'AUTH_BUDGET_ACL_SOURCE', 'AUTH_BUDGET_ACL_USERINFO_TIMEOUT_MS', 'AUTH_PROVIDER',
-  'MAX_CONCURRENT_SESSIONS', 'MCP_BRIDGE_DATA_DIR', 'MCP_BRIDGE_PORT', 'MCP_HTTP_BODY_LIMIT',
+  'MAX_CONCURRENT_SESSIONS', 'MCP_BRIDGE_DATA_DIR', 'MCP_BRIDGE_PORT', 'MCP_EXPERIMENTAL', 'MCP_HTTP_BODY_LIMIT',
   'MCP_TOOLS', 'MCP_TOOLSETS', 'MCP_TRANSPORT_MODE', 'OIDC_TOKEN_SOURCE',
 ];
 
@@ -198,7 +198,7 @@ check('P1: the CLI exits 0 and its success line names the reference and the defa
   assert.ok(r.stdout.includes(`and ${REFERENCE}; ${k} defaults match.`), `stdout: ${r.stdout}`);
 });
 
-check('P2: schemaDefaults returns exactly the 18 defaulted keys and each matches the reference', () => {
+check('P2: schemaDefaults returns exactly the 19 defaulted keys and each matches the reference', () => {
   const defaults = schemaDefaults(configSchema);
   assert.deepStrictEqual([...defaults.keys()].sort(), EXPECTED_DEFAULT_KEYS);
   assert.strictEqual(defaults.get('MCP_BRIDGE_PORT'), '3600');

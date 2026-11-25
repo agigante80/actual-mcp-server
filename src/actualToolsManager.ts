@@ -104,6 +104,7 @@ const IMPLEMENTED_TOOLS = [
   'actual_tags_delete',
   'actual_notes_get',
   'actual_notes_update',
+  'actual_categories_get_automations',
   'actual_budgets_export',
   'actual_budgets_import',
   'actual_preferences_get',
@@ -180,6 +181,7 @@ class ActualToolsManager implements CompactOperations {
     tools: config.MCP_TOOLS,
     readOnly: config.MCP_READ_ONLY,
     surface: config.MCP_TOOL_SURFACE,
+    experimental: config.MCP_EXPERIMENTAL,
   }, compactTools: readonly CompactToolSpec[] = COMPACT_TOOLS) {
     for (const name of this.compactNames) this.tools.delete(name);
     this.compactNames.clear();
@@ -258,6 +260,11 @@ class ActualToolsManager implements CompactOperations {
   getToolPolicy(): { toolsets: string[]; tools: string[]; readOnly: boolean; surface: string } {
     const { toolsets, tools, readOnly, surface } = this.requirePolicy().settings;
     return { toolsets: [...toolsets], tools: [...tools], readOnly, surface };
+  }
+
+  /** The enabled MCP_EXPERIMENTAL feature names (empty by default), for server_info. */
+  getExperimentalFeatures(): string[] {
+    return [...this.requirePolicy().settings.experimental];
   }
 
   /**

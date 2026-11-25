@@ -132,7 +132,7 @@ export function isPreflightRefusal(error: unknown): error is PreflightRefusal {
 }
 
 /** The server setting that can hide a registered tool (#483, #671). MCP_TOOLS only adds tools. */
-export type ToolUnavailableSetting = 'MCP_TOOLSETS' | 'MCP_READ_ONLY' | 'MCP_TOOL_SURFACE';
+export type ToolUnavailableSetting = 'MCP_TOOLSETS' | 'MCP_READ_ONLY' | 'MCP_TOOL_SURFACE' | 'MCP_EXPERIMENTAL';
 
 /**
  * A registered tool exists but this process does not publish it (#483), so the call is
@@ -154,12 +154,15 @@ export class ToolUnavailableError extends Error {
   /**
    * @param surface the MCP_TOOL_SURFACE value, named in the message for that setting only.
    * @param scope see the field; defaults to `tool`.
+   * @param feature the experimental feature the tool belongs to, named in the message for MCP_EXPERIMENTAL only.
    */
-  constructor(tool: string, setting: ToolUnavailableSetting, surface?: string, scope: 'tool' | 'action' = 'tool') {
+  constructor(tool: string, setting: ToolUnavailableSetting, surface?: string, scope: 'tool' | 'action' = 'tool', feature?: string) {
     super(
       setting === 'MCP_READ_ONLY'
         ? `Tool "${tool}" is not available: it can change state and this server runs with MCP_READ_ONLY=true.`
-        : setting === 'MCP_TOOL_SURFACE'
+        : setting === 'MCP_EXPERIMENTAL'
+          ? `Tool "${tool}" is not available: ${scope === 'action' ? 'that action' : 'it'} belongs to the experimental feature "${feature ?? 'unknown'}", which this server does not enable (MCP_EXPERIMENTAL).`
+          : setting === 'MCP_TOOL_SURFACE'
           ? `Tool "${tool}" is not available: this server publishes the ${surface ?? 'configured'} tool surface (MCP_TOOL_SURFACE).${
             surface === 'compact'
               ? ' The legacy tools are published only with MCP_TOOL_SURFACE=legacy.'

@@ -30,6 +30,7 @@ export { default as budgets_transfer } from './budgets_transfer.js';
 export { default as categories_create } from './categories_create.js';
 export { default as categories_delete } from './categories_delete.js';
 export { default as categories_get } from './categories_get.js';
+export { default as categories_get_automations } from './categories_get_automations.js';
 export { default as categories_update } from './categories_update.js';
 export { default as category_groups_create } from './category_groups_create.js';
 export { default as category_groups_delete } from './category_groups_delete.js';

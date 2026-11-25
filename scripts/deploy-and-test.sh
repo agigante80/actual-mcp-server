@@ -245,6 +245,14 @@ fi
 LEGACY_TOOL_COUNT=$(grep -c "^\s*'actual_" "$DEV_DIR/src/actualToolsManager.ts" || true)
 COMPACT_TOOL_COUNT=$(grep -m1 '^export const COMPACT_TOOLS' "$DEV_DIR/src/compact/registry.ts" \
   | sed -E 's/.*= *\[(.*)\].*/\1/' | awk -F',' '{ n = 0; for (i = 1; i <= NF; i++) if ($i ~ /[A-Za-z0-9_]/) n++; print n }')
+# #840: a tool gated by MCP_EXPERIMENTAL is registered but published only when its feature is named.
+# Each feature gates exactly one tool today (src/lib/toolsets.ts EXPERIMENTAL); subtract the tools of
+# the features the server does NOT name. Counting the unpublished tool would fail a correct server.
+EXPERIMENTAL_ENV="$(container_env MCP_EXPERIMENTAL)"
+case ",$EXPERIMENTAL_ENV," in
+  *,budget_automations,*) ;;
+  *) LEGACY_TOOL_COUNT=$((LEGACY_TOOL_COUNT - 1)) ;;
+esac
 case "$LEGACY_TOOL_COUNT" in ''|0|*[!0-9]*) err "could not count legacy tools in src/actualToolsManager.ts (got '$LEGACY_TOOL_COUNT')"; exit 1 ;; esac
 case "$COMPACT_TOOL_COUNT" in ''|0|*[!0-9]*) err "could not count COMPACT_TOOLS in src/compact/registry.ts (got '$COMPACT_TOOL_COUNT')"; exit 1 ;; esac
 case "$TOOL_SURFACE" in

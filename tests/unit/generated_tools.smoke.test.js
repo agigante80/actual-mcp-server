@@ -165,6 +165,8 @@ console.log('Running generated tools smoke tests');
     updateTag: null,
     deleteTag: null,
     getNote: { id: '00000000-0000-0000-0000-0000000000ab', note: 'hi' },
+    // experimental budget_automations read (#840): a note-managed category with one directive line
+    getCategoryAutomations: { categoryId: '00000000-0000-4000-8000-000000000001', source: 'notes', noteDirectives: ['#template 50'], cleanup: [] },
     updateNote: null,
     // #332/#333/#334: export returns a non-empty zip buffer (the tool rejects an
     // empty one), import returns the new budget id, preferences a synced-prefs map.
@@ -281,6 +283,7 @@ console.log('Running generated tools smoke tests');
   if (name.includes('tags_update')) inputExample.id = '00000000-0000-0000-0000-0000000000aa', inputExample.tag = 'food';
   if (name.includes('tags_delete')) inputExample.id = '00000000-0000-0000-0000-0000000000aa';
   if (name.includes('notes_get')) inputExample.id = '00000000-0000-0000-0000-0000000000ab';
+  if (name.includes('categories_get_automations')) inputExample.categoryId = '00000000-0000-4000-8000-000000000001';
   // notes_update: use a budget-YYYY-MM id to bypass the entity-lookup guard
   // (the smoke test stubs return empty entity lists, so a UUID would fail the guard)
   if (name.includes('notes_update')) inputExample.id = 'budget-2026-01', inputExample.note = '#template 250';
@@ -499,6 +502,14 @@ console.log('Running generated tools smoke tests');
         const r = res.result;
         if (typeof r?.found !== 'boolean') shapeErr(`expected result.found to be boolean`);
         if (typeof r?.id !== 'string') shapeErr(`expected result.id to be a string`);
+      }
+      // categories_get_automations (#840): createTool wraps the read in { result }
+      if (n === 'categories_get_automations') {
+        if (!res || !('result' in res)) shapeErr(`expected { result } wrapper`);
+        const r = res.result;
+        if (r?.source !== 'notes' && r?.source !== 'ui') shapeErr(`expected result.source to be notes or ui`);
+        if (typeof r?.categoryId !== 'string') shapeErr(`expected result.categoryId to be a string`);
+        if (!Array.isArray(r?.cleanup)) shapeErr(`expected result.cleanup to be a list`);
       }
       // notes_update: createTool wraps the result in { result }
       if (n === 'notes_update') {

@@ -73,6 +73,7 @@ const {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
 } = api as any;
 import { EventEmitter } from 'events';
+import { shapeCategoryAutomations, templateSource, type EditorAutomations, type NoteAutomations } from './schemas/automations.js';
 import observability from '../observability.js';
 import { retry, isRetryableError, isRateLimitError } from './retry.js';
 import { withOpTimeout, runAbandonable, assertOperationLive } from './opTimeout.js';
@@ -6345,6 +6346,53 @@ export async function getPreferences(): Promise<Record<string, unknown>> {
   });
 }
 
+/**
+ * Experimental feature `budget_automations` (ADR 0003, 0004): read one category's automations
+ * and cleanup. A PURE READ in ONE api cycle: AQL reads of `categories` and `cleanup_groups`, the
+ * `defaultCurrencyCode` preference and, for a note-managed category, the category note. Inside
+ * the cycle it calls the RAW bindings, never the exported getNote or getPreferences, which
+ * open a cycle of their own: nesting them stalls 30 s on the non-reentrant api lock. It
+ * performs no internal send and no write, so it does not touch the write queue.
+ * The unknown-id refusal is a NotFoundRefusal; the shaping rules live in schemas/automations.ts.
+ */
+export async function getCategoryAutomations(categoryId: string): Promise<EditorAutomations | NoteAutomations> {
+  return withActualApi(async () => {
+    observability.incrementToolCall('actual.categories.get_automations').catch(() => {});
+    const { q } = (await import('@actual-app/api')) as any; // eslint-disable-line @typescript-eslint/no-explicit-any
+    const read = (query: unknown): Promise<Array<Record<string, unknown>>> =>
+      withConcurrency(() => retry(async () => {
+        const res = (await rawRunQuery(query)) as { data?: Array<Record<string, unknown>> } | undefined;
+        return res?.data ?? [];
+      }, { retries: 2, backoffMs: 200 }));
+
+    const [category] = await read(q('categories').filter({ id: categoryId }).select(['id', 'template_settings', 'goal_def', 'cleanup_def']));
+    if (!category) throw new NotFoundRefusal('Category', categoryId, 'actual_categories_get');
+
+    const groups = await read(q('cleanup_groups').select(['id', 'name']));
+    const prefs = await withConcurrency(() => retry(() => rawGetPreferences() as Promise<Record<string, unknown> | null>, { retries: 2, backoffMs: 200, isRetryable: isRetryableError }));
+    // A percentage entry names an income category, so the names are read only when one could resolve.
+    const needsNames = typeof category.goal_def === 'string' && category.goal_def.includes('"percentage"');
+    const categories = needsNames ? await read(q('categories').select(['id', 'name'])) : [];
+    const noteManaged = templateSource(category.template_settings) === 'notes';
+    const noteRow = noteManaged
+      ? await withConcurrency(() => retry(() => rawGetNote(categoryId) as Promise<{ id: string; note: string } | null>, { retries: 2, backoffMs: 200 }))
+      : null;
+
+    const names = (rows: Array<Record<string, unknown>>): Map<string, string> =>
+      new Map(rows.filter((r) => typeof r.id === 'string' && typeof r.name === 'string').map((r) => [r.id as string, r.name as string]));
+    return shapeCategoryAutomations({
+      categoryId,
+      templateSettings: category.template_settings,
+      goalDef: category.goal_def,
+      cleanupDef: category.cleanup_def,
+      note: noteRow?.note ?? null,
+      currencyCode: prefs?.defaultCurrencyCode,
+      cleanupGroupNames: names(groups),
+      categoryNames: names(categories),
+    });
+  });
+}
+
 export default {
   getAccounts,
   resolveFilterId,
@@ -6368,6 +6416,7 @@ export default {
   updateTag,
   deleteTag,
   getNote,
+  getCategoryAutomations,
   updateNote,
   getBudgetMonths,
   getBudgetMonth,
