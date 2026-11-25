@@ -230,7 +230,8 @@ Select a second different category for the transfer test. Save as `{budget_cat2_
   operation as skipped, which is neither a pass nor a failure, and do not count it)
   NEGATIVES ONLY: the live budget's setting state is unknown and a save would switch a real category.
   Negative: { action: "set_automations", id: "00000000-0000-4000-8000-000000000000", automations: [] }
-    Expect: a refusal saying the category was not found or the editor is not enabled
+    Expect: a refusal saying the category was not found, Goal templates are not enabled or the editor
+    is not enabled
   Negative: { action: "set_automations", id: "00000000-0000-4000-8000-000000000000", automations: [{ type: "nope" }] }
     Expect: a refusal naming type
   Negative: two entries { type: "limit", amount: 100, period: "monthly" } in one list

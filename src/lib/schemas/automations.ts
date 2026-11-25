@@ -234,13 +234,21 @@ const priority = z.number().int().min(0).max(1000).default(1);
 const nullPriority = z.null().optional();
 const description = z.string().max(1000).optional();
 const templateDirective = z.literal('template').optional();
+/**
+ * Upstream walks from a stored date to the budget month one period at a time on every apply, so a
+ * year far in the past (0001) would block the event loop on each later apply. Pinned by tests.
+ */
+export const AUTOMATION_YEAR_MESSAGE = 'the year must be between 1970 and 2199.';
+const yearInRange = (v: string): boolean => !/^\d{4}/.test(v) || (Number(v.slice(0, 4)) >= 1970 && Number(v.slice(0, 4)) <= 2199);
+const boundedDate = CommonSchemas.date.refine(yearInRange, AUTOMATION_YEAR_MESSAGE).describe('Date in YYYY-MM-DD format, year 1970 to 2199');
+const boundedMonth = CommonSchemas.monthYear.refine(yearInRange, AUTOMATION_YEAR_MESSAGE).describe('Month in YYYY-MM format, year 1970 to 2199');
 
 const periodic = z.strictObject({
   type: z.literal('periodic'),
   directive: templateDirective,
   amount: minor,
   period: z.strictObject({ period: z.enum(['day', 'week', 'month', 'year']), amount: z.number().int().min(1).max(1000) }),
-  starting: CommonSchemas.date,
+  starting: boundedDate,
   priority,
   description,
 });
@@ -250,7 +258,7 @@ const limit = z.strictObject({
   amount: minor,
   period: z.enum(['daily', 'weekly', 'monthly']),
   hold: z.boolean().default(false),
-  start: CommonSchemas.date.optional(),
+  start: boundedDate.optional(),
   priority: nullPriority,
   description,
 }).superRefine((v, ctx) => {
@@ -273,7 +281,7 @@ const by = z.strictObject({
   type: z.literal('by'),
   directive: templateDirective,
   amount: minor,
-  month: CommonSchemas.monthYear,
+  month: boundedMonth,
   annual: z.boolean().default(false),
   repeat: z.number().int().min(1).max(1200).optional(),
   priority,

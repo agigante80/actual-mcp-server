@@ -96,7 +96,9 @@ adapterMod._setInternalSendForTests(async (name, args) => {
   sent.push({ name, args });
   if (sendError) throw sendError;
   const apply = () => {
-    stored = { template_settings: JSON.stringify({ source: args.source }), goal_def: JSON.stringify(args.categoriesWithTemplates[0].templates), cleanup_def: stored.cleanup_def };
+    // As upstream storeTemplates does: an empty list is stored as a NULL column.
+    const list = args.categoriesWithTemplates[0].templates;
+    stored = { template_settings: JSON.stringify({ source: args.source }), goal_def: list.length > 0 ? JSON.stringify(list) : null, cleanup_def: stored.cleanup_def };
   };
   if (landAfterMs === 0) apply();
   else if (landAfterMs !== Infinity) timers.push(setTimeout(apply, landAfterMs));
@@ -139,9 +141,12 @@ for (const [code, minor, major] of [['JPY', 5000, 5000], ['KRW', 5000, 5000], ['
 console.log('\n[#842 U3] an empty list is sent as an empty list');
 reset();
 {
-  const { error } = await save([]);
+  stored.goal_def = JSON.stringify([{ type: 'goal', directive: 'goal', amount: 5 }]);
+  const { error, value } = await save([]);
   check(!error, 'no error', String(error?.message));
   same(stored1(), [], 'templates []');
+  check(stored.goal_def === null, 'the stub stores NULL for an empty list, as upstream does');
+  check(value?.verified === true, 'a clear reads back as verified', JSON.stringify(value));
 }
 
 console.log('\n[#842 U4] directive, null priorities, description and categoryName');
@@ -241,6 +246,33 @@ reset();
   const none = await save([{ type: 'schedule' }]);
   check(none.error?.name === 'ZodError' && /give exactly one of scheduleId or name\./.test(none.error.message), 'neither: a schema error');
   check(sent.length === 0, 'nothing sent');
+}
+
+reset(); schedules = [{ id: SCHED, name: ' Rent ' }];
+{
+  await save([{ type: 'schedule', scheduleId: SCHED }]);
+  same(stored1(), [{ type: 'schedule', directive: 'template', name: 'Rent', priority: 1 }], 'a padded schedule name is stored trimmed (by id)');
+  reset(); schedules = [{ id: SCHED, name: ' Rent ' }];
+  await save([{ type: 'schedule', name: 'Rent' }]);
+  same(stored1(), [{ type: 'schedule', directive: 'template', name: 'Rent', priority: 1 }], 'and matched and stored trimmed (by name)');
+}
+
+console.log('\n[#842] dates are bounded to years 1970 to 2199');
+for (const [label, entry, path] of [
+  ['periodic starting 0001', { ...PERIODIC, starting: '0001-01-01' }, '0.starting'],
+  ['periodic starting 2200', { ...PERIODIC, starting: '2200-01-01' }, '0.starting'],
+  ['weekly limit start 1969', { type: 'limit', amount: 100, period: 'weekly', start: '1969-12-29' }, '0.start'],
+  ['by month 0001', { type: 'by', amount: 100, month: '0001-01' }, '0.month'],
+]) {
+  reset();
+  const { error } = await save([entry]);
+  check(error?.name === 'ZodError' && error.issues.some((i) => i.path.join('.') === path && i.message === 'the year must be between 1970 and 2199.'), `${label}: refused with the year message`, error?.message);
+  check(sent.length === 0, `${label}: nothing sent`);
+}
+reset();
+{
+  const { error } = await save([{ ...PERIODIC, starting: '1970-01-01' }, { type: 'by', amount: 100, month: '2199-12' }]);
+  check(!error, 'the bounds themselves are accepted', String(error?.message));
 }
 
 console.log('\n[#842 U9] percentage sources');

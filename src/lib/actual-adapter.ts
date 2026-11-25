@@ -6633,11 +6633,13 @@ async function runSetCategoryAutomations(
         const row = live.find((s) => s.id === entry.scheduleId);
         if (!row) throw new NotFoundRefusal('Schedule', entry.scheduleId, 'actual_schedules_get');
         if (typeof row.name !== 'string' || row.name.trim() === '') throw new OutOfRangeRefusal(UNNAMED_SCHEDULE_MESSAGE(entry.scheduleId), entry.scheduleId);
-        scheduleNames.set(index, row.name);
+        // Trimmed: upstream looks the schedule up with TRIM(name) = <stored name> at apply time.
+        scheduleNames.set(index, row.name.trim());
       } else {
-        const row = live.find((s) => typeof s.name === 'string' && s.name.trim() !== '' && s.name === entry.name);
+        const wanted = String(entry.name).trim();
+        const row = live.find((s) => typeof s.name === 'string' && s.name.trim() !== '' && s.name.trim() === wanted);
         if (!row) throw new NotFoundRefusal('Schedule', String(entry.name), 'actual_schedules_get');
-        scheduleNames.set(index, row.name as string);
+        scheduleNames.set(index, (row.name as string).trim());
       }
     });
   }
@@ -6660,10 +6662,11 @@ async function runSetCategoryAutomations(
   // The result: the read side's shape, once the stored column shows what was sent (a raw write lands late, #493).
   const T = config.ACTUAL_OP_TIMEOUT_MS;
   const deadline = T > 0 ? opStartedAt + Math.floor(T / 2) : 0;
+  // Upstream stores an empty list as a NULL column, which parses to nothing: compare both as [].
   const sent = canonicalJson(templates);
   const { value, matched } = await readUntilMatches(
     () => loadCategoryAutomations(categoryId),
-    (v) => templateSource(v.templateSettings) === 'ui' && canonicalJson(parseJsonColumn(v.goalDef).parsed) === sent,
+    (v) => templateSource(v.templateSettings) === 'ui' && canonicalJson(parseJsonColumn(v.goalDef).parsed ?? []) === sent,
     DEFAULT_SETTLE,
     deadline,
   );
