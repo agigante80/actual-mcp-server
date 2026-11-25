@@ -5131,6 +5131,56 @@ test.describe('Docker E2E - compact manage_categories (#676)', () => {
     expect(await refusal(() => mcp.call('list_entities', { type: 'category_automations' }))).toMatch(/category_id/);
   });
 
+  // #841: the experimental template writes, part of budget_automations. They need the Goal templates
+  // setting ON in the budget: tests/e2e/enable-goal-templates.mjs sets it on the Actual server during
+  // the bootstrap, before the MCP container downloads the budget. Every row below FAILS (an expect), never
+  // skips, when the stack does not publish the actions.
+  const budgetedAmount = async (mcp: any, id: string) => {
+    const month = await mcp.call('list_budget_months', { month: currentMonth() });
+    return ((month?.categoryGroups ?? []) as any[]).flatMap((g: any) => g?.categories ?? []).find((c: any) => c?.id === id)?.budgeted;
+  };
+  const expectTemplateActions = async (mcp: any) => {
+    const tool = (await mcp.listTools()).find((t: any) => t.name === 'manage_budget_months');
+    expect(tool?.inputSchema?.properties?.action?.enum, 'the E2E stack must enable budget_automations').toEqual(expect.arrayContaining(['apply_templates', 'run_cleanup']));
+  };
+
+  test('manage_budget_months apply_templates - a #template note sets only the named category (#841)', async ({ mcp, makeCategory, cleanup }) => {
+    await expectTemplateActions(mcp);
+    const category = await makeCategory();
+    cleanup.add(CLEANUP_ORDER.budgetHold, `restore budget of category ${category.id}`, async () => {
+      await mcp.call('manage_budget_months', { action: 'set_amount', month: currentMonth(), category_id: category.id, amount: 0 }).catch(() => undefined);
+    });
+    cleanup.add(CLEANUP_ORDER.note, `note ${category.id}`, async () => {
+      await mcp.call('manage_categories', { action: 'set_note', id: category.id, note: '' }).catch(() => undefined);
+    });
+    await mcp.call('manage_categories', { action: 'set_note', id: category.id, note: '#template 50' });
+    const res = await mcp.call('manage_budget_months', { action: 'apply_templates', month: currentMonth(), category_id: category.id, overwrite: true });
+    expect(res?.month).toBe(currentMonth());
+    expect(res?.verified).toBe(true);
+    expect(res?.changes).toEqual([{ categoryId: category.id, name: category.name, before: 0, after: 5000 }]);
+    expect(await budgetedAmount(mcp, category.id)).toBe(5000);
+  });
+
+  test('manage_budget_months apply_templates and run_cleanup - ERROR: out-of-range month, category without overwrite, foreign field and unknown category are refused (#841)', async ({ mcp }) => {
+    await expectTemplateActions(mcp);
+    const zero = '00000000-0000-4000-8000-000000000000';
+    expect(await refusal(() => mcp.call('manage_budget_months', { action: 'apply_templates', month: '2019-01' }))).toMatch(/outside this budget's range/);
+    expect(await refusal(() => mcp.call('manage_budget_months', { action: 'run_cleanup', month: '2019-01' }))).toMatch(/outside this budget's range/);
+    expect(await refusal(() => mcp.call('manage_budget_months', { action: 'apply_templates', month: currentMonth(), category_id: zero }))).toMatch(/overwrite: true/);
+    expect(await refusal(() => mcp.call('manage_budget_months', { action: 'apply_templates', month: currentMonth(), category_id: zero, overwrite: true }))).toMatch(/not found/i);
+    expect(await refusal(() => mcp.call('manage_budget_months', { action: 'run_cleanup', month: currentMonth(), category_id: zero }))).toMatch(/category_id/);
+    expect(await refusal(() => mcp.call('manage_budget_months', { action: 'run_cleanup' }))).toMatch(/month/);
+  });
+
+  test('manage_budget_months run_cleanup - runs on the test budget and reports the verified re-read (#841)', async ({ mcp }) => {
+    await expectTemplateActions(mcp);
+    // The fixture budget carries no #cleanup directives, so this moves nothing; the assertion is the result shape.
+    const res = await mcp.call('manage_budget_months', { action: 'run_cleanup', month: currentMonth() });
+    expect(res?.month).toBe(currentMonth());
+    expect(typeof res?.verified).toBe('boolean');
+    expect(Array.isArray(res?.changes)).toBe(true);
+  });
+
   test('manage_categories - ERROR: missing entity, missing group_id, hidden on a category and an empty update', async ({ mcp }) => {
     const id = '00000000-0000-4000-8000-000000000000';
     expect(await refusal(() => mcp.call('manage_categories', { action: 'create', name: 'x' }))).toMatch(/entity/);
@@ -6675,6 +6725,28 @@ test.describe('legacy smoke (MCP_TOOL_SURFACE=all)', () => {
     expect(data?.source).toBe('notes');
     expect(data?.noteDirectives).toEqual(['#template 50']);
     expect(await refusal(() => mcp.call('actual_categories_get_automations', { categoryId: '00000000-0000-4000-8000-000000000000' }))).toMatch(/not found/i);
+  });
+
+  // #841: the legacy tools behind apply_templates and run_cleanup; published only with MCP_EXPERIMENTAL.
+  test('actual_budgets_apply_templates and actual_budgets_run_cleanup - apply one category, refuse a bad month (#841)', async ({ mcp, makeCategory, cleanup }) => {
+    const names = (await mcp.listTools()).map((t: any) => t.name);
+    expect(names, 'the E2E stack must enable budget_automations').toEqual(expect.arrayContaining(['actual_budgets_apply_templates', 'actual_budgets_run_cleanup']));
+    const category = await makeCategory();
+    cleanup.add(CLEANUP_ORDER.budgetHold, `restore budget of category ${category.id}`, async () => {
+      await mcp.call('actual_budgets_set_amount', { month: currentMonth(), categoryId: category.id, amount: 0 }).catch(() => undefined);
+    });
+    cleanup.add(CLEANUP_ORDER.note, `note ${category.id}`, async () => {
+      await mcp.call('actual_notes_update', { id: category.id, note: '' }).catch(() => undefined);
+    });
+    await mcp.call('actual_notes_update', { id: category.id, note: '#template 50' });
+    const applied = await mcp.call('actual_budgets_apply_templates', { month: currentMonth(), categoryId: category.id, overwrite: true });
+    expect(applied?.verified).toBe(true);
+    expect(applied?.changes).toEqual([{ categoryId: category.id, name: category.name, before: 0, after: 5000 }]);
+    expect(await refusal(() => mcp.call('actual_budgets_apply_templates', { month: '2019-01' }))).toMatch(/outside this budget's range/);
+    expect(await refusal(() => mcp.call('actual_budgets_apply_templates', { month: currentMonth(), categoryId: category.id }))).toMatch(/overwrite/);
+    const cleaned = await mcp.call('actual_budgets_run_cleanup', { month: currentMonth() });
+    expect(typeof cleaned?.verified).toBe('boolean');
+    expect(await refusal(() => mcp.call('actual_budgets_run_cleanup', { month: '2019-01' }))).toMatch(/outside this budget's range/);
   });
 
   test('actual_entities_search - finds a seeded payee and returns nothing for a nonsense query', async ({ mcp, makePayee }) => {

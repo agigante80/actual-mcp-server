@@ -35,7 +35,7 @@
  */
 const REFUSAL_BRAND = Symbol.for('actual-mcp-server.PreflightRefusal');
 
-export type RefusalKind = 'not-found' | 'out-of-range' | 'conflict' | 'locked';
+export type RefusalKind = 'not-found' | 'out-of-range' | 'conflict' | 'locked' | 'feature-disabled';
 
 /**
  * A pre-flight refusal: the operation was NOT attempted, because the request named
@@ -115,6 +115,18 @@ export class OutOfRangeRefusal extends PreflightRefusal {
 export class ConflictRefusal extends PreflightRefusal {
   constructor(message: string) {
     super(message, 'conflict');
+  }
+}
+
+/**
+ * A budget setting the request depends on is switched off in THIS budget (#841: Goal templates,
+ * ADR 0004). The operator may have published the tool (MCP_EXPERIMENTAL) while the budget still has
+ * the feature off, and upstream does not enforce its own flag, so the adapter refuses before the
+ * first send. Nothing was changed; the message tells the user which setting to turn on.
+ */
+export class FeatureDisabledRefusal extends PreflightRefusal {
+  constructor(message: string) {
+    super(message, 'feature-disabled');
   }
 }
 

@@ -60,7 +60,7 @@ Because all three prompts run in the **same chat session**, the AI retains:
 | 6b | Prompt 2 | 5 | Schedule CRUD + upcoming dates (#479): `manage_schedules` |
 | 6c | Prompt 2 | 7 | Tag CRUD (#184, covered here since #451): `manage_tags`; tagging through notes and the substring notes search (#702): `manage_transactions`, `search_transactions` |
 | 7 | Prompt 3 | 5 | `summarize_transactions` reports by_category, by_payee, grouped, account_flow, recurring (#451) |
-| 8 | Prompt 3 | 11 | Budget management: `manage_budget_months`, `manage_budget_files`, `list_budget_months` |
+| 8 | Prompt 3 | 13 | Budget management: `manage_budget_months`, `manage_budget_files`, `list_budget_months`; experimental `manage_budget_months` actions `apply_templates` and `run_cleanup` (#841, negatives only, skipped unless MCP_EXPERIMENTAL names budget_automations) |
 | 9 | Prompt 3 | 2 | Advanced query + bank sync: `run_query`, `manage_accounts` action bank_sync |
 | 9b | Prompt 3 | 3 | Notes (get + set): `list_entities` type note, the `set_note` actions; experimental `list_entities` type category_automations (#840, skipped unless MCP_EXPERIMENTAL names budget_automations) |
 | 9c | Prompt 3 | 1 | Preferences (synced display settings, #333): `get_context` topic preferences |
@@ -69,10 +69,10 @@ Because all three prompts run in the **same chat session**, the AI retains:
 | 11 | Prompt 3 |  | Concurrency (optional, skipped by default) |
 | 12 | Prompt 3 |  | Full cleanup |
 
-**Total: 89 tools across 3 prompts**
+**Total: 91 tools across 3 prompts**
 
-The 89 nominal operations include the 2 session operations of Phase 10. On the compact surface that
-block is skipped, so a compact run reaches at most 87.
+The 91 nominal operations include the 2 session operations of Phase 10. On the compact surface that
+block is skipped, so a compact run reaches at most 89.
 
 ---
 

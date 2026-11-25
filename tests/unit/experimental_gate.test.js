@@ -42,6 +42,8 @@ const { buildToolListEntries } = await import('../../dist/src/lib/tool-list-entr
 const { outputJsonSchema } = await import('../../dist/src/lib/tool-output.js');
 
 const GATED = 'actual_categories_get_automations';
+// #841: the feature now gates the read tool and the two template writes.
+const FEATURE_TOOLS = [GATED, 'actual_budgets_apply_templates', 'actual_budgets_run_cleanup'];
 const FEATURE = 'budget_automations';
 const ALL = { toolsets: 'all', tools: '', readOnly: false };
 
@@ -54,7 +56,7 @@ const thrown = (fn) => { try { fn(); } catch (e) { return e; } return undefined;
 // ---- the table ----
 
 await check('the EXPERIMENTAL table maps the feature to the gated read tool, and the registry holds the tool', () => {
-  assert.deepStrictEqual(EXPERIMENTAL[FEATURE], [GATED]);
+  assert.deepStrictEqual(EXPERIMENTAL[FEATURE], FEATURE_TOOLS);
   assert.strictEqual(experimentalFeatureOf(GATED), FEATURE);
   assert.strictEqual(experimentalFeatureOf('actual_accounts_list'), undefined);
   assert.ok(registered.includes(GATED), 'the tool is registered (and so counted in IMPLEMENTED_TOOLS)');
@@ -69,12 +71,12 @@ await check('POSITIVE: with the feature named the tool is published and nothing 
   assert.deepStrictEqual([...p.settings.experimental], [FEATURE]);
 });
 
-await check('NEGATIVE: with the feature empty the tool is hidden for MCP_EXPERIMENTAL, and only that tool is', () => {
+await check('NEGATIVE: with the feature empty the tool is hidden for MCP_EXPERIMENTAL, and only the feature tools are', () => {
   const p = resolve({ experimental: '' });
   assert.ok(!p.published.includes(GATED));
   assert.strictEqual(p.hidden.get(GATED), 'MCP_EXPERIMENTAL');
-  assert.deepStrictEqual([...p.hidden].filter(([, why]) => why === 'MCP_EXPERIMENTAL').map(([n]) => n), [GATED]);
-  assert.strictEqual(p.published.length, registered.length - 1);
+  assert.deepStrictEqual([...p.hidden].filter(([, why]) => why === 'MCP_EXPERIMENTAL').map(([n]) => n).sort(), [...FEATURE_TOOLS].sort());
+  assert.strictEqual(p.published.length, registered.length - FEATURE_TOOLS.length);
   assert.deepStrictEqual([...p.settings.experimental], []);
 });
 
@@ -248,7 +250,10 @@ await check('NEGATIVE: getExperimentalFeatures() before initialize() fails close
 
 // Measured on origin/develop ebe14145 (the commit before this change), with the same entry
 // builder the server uses for tools/list.
-const DEFAULT_BYTES = { legacy: 127058, compact: 44852, all: 171909 };
+// #841 re-measured compact and all: manage_budget_months carries nine actions with the feature on
+// and the entry must stay under the 3,900 byte per-tool ceiling, so its older text was trimmed
+// (compact 44852 to 44460, all 171909 to 171517). The legacy list is unchanged.
+const DEFAULT_BYTES = { legacy: 127058, compact: 44460, all: 171517 };
 const DEFAULT_COUNT = { legacy: 85, compact: 15, all: 100 };
 const LIST_ENTITIES_DEFAULT_BYTES = 3900;
 
@@ -282,9 +287,9 @@ await check('default configuration: the published list_entities entry is the sam
   assert.strictEqual(bytes(entries.find((e) => e.name === 'list_entities')), LIST_ENTITIES_DEFAULT_BYTES);
 });
 
-await check('with the feature on, the legacy list gains exactly the one tool and the compact list keeps its 15 tools', async () => {
+await check('with the feature on, the legacy list gains exactly the feature tools and the compact list keeps its 15 tools', async () => {
   const legacy = await listEntries('legacy', FEATURE);
-  assert.strictEqual(legacy.length, DEFAULT_COUNT.legacy + 1);
+  assert.strictEqual(legacy.length, DEFAULT_COUNT.legacy + FEATURE_TOOLS.length);
   assert.ok(legacy.some((e) => e.name === GATED));
   const compact = await listEntries('compact', FEATURE);
   assert.strictEqual(compact.length, DEFAULT_COUNT.compact);

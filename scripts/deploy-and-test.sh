@@ -246,13 +246,18 @@ LEGACY_TOOL_COUNT=$(grep -c "^\s*'actual_" "$DEV_DIR/src/actualToolsManager.ts" 
 COMPACT_TOOL_COUNT=$(grep -m1 '^export const COMPACT_TOOLS' "$DEV_DIR/src/compact/registry.ts" \
   | sed -E 's/.*= *\[(.*)\].*/\1/' | awk -F',' '{ n = 0; for (i = 1; i <= NF; i++) if ($i ~ /[A-Za-z0-9_]/) n++; print n }')
 # #840: a tool gated by MCP_EXPERIMENTAL is registered but published only when its feature is named.
-# Each feature gates exactly one tool today (src/lib/toolsets.ts EXPERIMENTAL); subtract the tools of
-# the features the server does NOT name. Counting the unpublished tool would fail a correct server.
+# A feature gates every tool on its row of src/lib/toolsets.ts EXPERIMENTAL (#841: budget_automations
+# has three); subtract that many when the server does NOT name the feature, counting the row rather
+# than assuming one. Counting an unpublished tool would fail a correct server.
 # The server trims each name, so spaces around a comma must not change the count here.
 EXPERIMENTAL_ENV="$(container_env MCP_EXPERIMENTAL | tr -d ' ')"
 case ",$EXPERIMENTAL_ENV," in
   *,budget_automations,*) ;;
-  *) LEGACY_TOOL_COUNT=$((LEGACY_TOOL_COUNT - 1)) ;;
+  *)
+    BUDGET_AUTOMATIONS_TOOLS=$(grep -m1 '^  budget_automations:' "$DEV_DIR/src/lib/toolsets.ts" | grep -o "'actual_[a-z_]*'" | wc -l | tr -d ' ')
+    case "$BUDGET_AUTOMATIONS_TOOLS" in ''|0|*[!0-9]*) err "could not count the budget_automations tools in src/lib/toolsets.ts (got '$BUDGET_AUTOMATIONS_TOOLS')"; exit 1 ;; esac
+    LEGACY_TOOL_COUNT=$((LEGACY_TOOL_COUNT - BUDGET_AUTOMATIONS_TOOLS))
+    ;;
 esac
 case "$LEGACY_TOOL_COUNT" in ''|0|*[!0-9]*) err "could not count legacy tools in src/actualToolsManager.ts (got '$LEGACY_TOOL_COUNT')"; exit 1 ;; esac
 case "$COMPACT_TOOL_COUNT" in ''|0|*[!0-9]*) err "could not count COMPACT_TOOLS in src/compact/registry.ts (got '$COMPACT_TOOL_COUNT')"; exit 1 ;; esac

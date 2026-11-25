@@ -55,6 +55,8 @@ const C1 = '123e4567-e89b-42d3-a456-426614174000';
 const C2 = '223e4567-e89b-42d3-a456-426614174001';
 const M = '2026-11';
 const ACTIONS = ['set_amount', 'set_amount_batch', 'set_carryover', 'hold', 'reset_hold', 'transfer', 'set_note'];
+// #841: the two experimental actions are in the schema but, being gated, absent from the feature-off description.
+const GATED_ACTIONS = ['apply_templates', 'run_cleanup'];
 const READ_ONLY_CASES = [
   ['actual_budgets_set_amount', { action: 'set_amount', month: M, category_id: C1, amount: 100 }],
   ['actual_budget_updates_batch', { action: 'set_amount_batch', operations: [{ month: M, categoryId: C1, amount: 1 }] }],
@@ -165,7 +167,7 @@ await check('published schema: flat, action required, no oneOf or anyOf, every p
   assert.strictEqual(js.type, 'object');
   assert.ok(!/oneOf|anyOf/.test(JSON.stringify(js)), 'no oneOf or anyOf at any depth');
   assert.deepStrictEqual(js.required, ['action']);
-  assert.deepStrictEqual(js.properties.action.enum, ACTIONS);
+  assert.deepStrictEqual(js.properties.action.enum, [...ACTIONS, ...GATED_ACTIONS]);
   for (const [k, v] of Object.entries(js.properties)) {
     if (k === 'action') continue;
     assert.ok(v.description, `${k} has no description`);
@@ -187,7 +189,7 @@ await check('annotations and title', () => {
   assert.strictEqual(titleFor('manage_budget_months'), 'Manage budget months');
 });
 await check('compactLegacyNames covers the targets, all write-capable', () => {
-  assert.deepStrictEqual([...compactLegacyNames(spec)].sort(), ['actual_budget_updates_batch', 'actual_budgets_hold_for_next_month', 'actual_budgets_reset_hold', 'actual_budgets_set_amount', 'actual_budgets_set_carryover', 'actual_budgets_transfer', 'actual_notes_update']);
+  assert.deepStrictEqual([...compactLegacyNames(spec)].sort(), ['actual_budget_updates_batch', 'actual_budgets_apply_templates', 'actual_budgets_hold_for_next_month', 'actual_budgets_reset_hold', 'actual_budgets_run_cleanup', 'actual_budgets_set_amount', 'actual_budgets_set_carryover', 'actual_budgets_transfer', 'actual_notes_update']);
   for (const n of compactLegacyNames(spec)) assert.ok(WRITE_CAPABLE.has(n), n);
 });
 await check('#759 NEGATIVE: set_amount, transfer and a batch item are bounded at 2251799813685247, hold is not', async () => {

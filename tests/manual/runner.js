@@ -23,7 +23,7 @@
  *   MCP_AUTH_TOKEN        Bearer token override
  *   MCP_TEST_LEVEL        Test level override
  *   ACTUAL_SERVER_URL     Actual Budget server URL (shown in cleanup prompt)
- *   EXPECTED_TOOL_COUNT   Expected number of MCP tools (default: 86)
+ *   EXPECTED_TOOL_COUNT   Expected number of MCP tools (default: 88)
  */
 
 import path from 'node:path';
@@ -42,6 +42,7 @@ import { smokeTests } from './tests/smoke.js';
 import { accountTests } from './tests/account.js';
 import { notesTests } from './tests/notes.js';
 import { categoryAutomationsTests } from './tests/category_automations.js';
+import { budgetTemplatesTests } from './tests/budget_templates.js';
 import { extendedTests, fullTests } from './tests/advanced.js';
 import { roundtripTests } from './tests/roundtrip.js';
 import { cleanupMcpTestAccounts } from './cleanup.js';
@@ -216,6 +217,10 @@ export async function run() {
     // #840: experimental feature budget_automations; skips with one line when it is not published.
     await categoryAutomationsTests(client, context);
     guard.setLastCompleted('categoryAutomationsTests');
+
+    // #841: experimental template actions; negatives only, skips with one line when not published.
+    await budgetTemplatesTests(client, context);
+    guard.setLastCompleted('budgetTemplatesTests');
 
     if (level === "extended") {
       await extendedTests(client, context);
