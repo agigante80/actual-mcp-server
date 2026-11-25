@@ -5218,6 +5218,7 @@ test.describe('Docker E2E - compact manage_categories (#676)', () => {
     expect(read?.automations?.[0]?.amount).toBe(5000);
     const applied = await mcp.call('manage_budget_months', { action: 'apply_templates', month: currentMonth(), category_id: category.id, overwrite: true });
     expect(applied?.changes).toEqual([expect.objectContaining({ categoryId: category.id, before: 0, after: 5000 })]);
+    expect(await budgetedAmount(mcp, category.id), 'the applied amount is stored').toBe(5000);
   });
 
   test('manage_categories set_automations - a note-managed category needs confirm_note_switch (#842)', async ({ mcp, makeCategory, cleanup }) => {
@@ -5237,6 +5238,7 @@ test.describe('Docker E2E - compact manage_categories (#676)', () => {
     expect(saved?.source).toBe('ui');
     const applied = await mcp.call('manage_budget_months', { action: 'apply_templates', month: currentMonth(), category_id: category.id, overwrite: true });
     expect(applied?.changes).toEqual([expect.objectContaining({ categoryId: category.id, before: 0, after: 7000 })]);
+    expect(await budgetedAmount(mcp, category.id), 'the applied amount is stored').toBe(7000);
   });
 
   test('manage_categories set_automations - ERROR: unknown category, unknown type, two limits and a source field are refused (#842)', async ({ mcp, makeCategory }) => {
@@ -6827,18 +6829,18 @@ test.describe('legacy smoke (MCP_TOOL_SURFACE=all)', () => {
       await mcp.call('actual_categories_set_automations', { categoryId: category.id, automations: [] }).catch(() => undefined);
       await mcp.call('actual_notes_update', { id: category.id, note: '' }).catch(() => undefined);
     });
-    const saved = await mcp.call('actual_categories_set_automations', { categoryId: category.id, automations: [{ type: 'goal', amount: 100000 }] });
+    // First, while the category is still note-managed: the save is refused until confirmed.
+    await mcp.call('actual_notes_update', { id: category.id, note: '#template 50' });
+    expect(await refusal(() => mcp.call('actual_categories_set_automations', { categoryId: category.id, automations: [{ type: 'goal', amount: 100000 }] }))).toMatch(/confirmNoteSwitch/);
+    const saved = await mcp.call('actual_categories_set_automations', { categoryId: category.id, automations: [{ type: 'goal', amount: 100000 }], confirmNoteSwitch: true });
     expect(saved?.verified).toBe(true);
     const read = await mcp.call('actual_categories_get_automations', { categoryId: category.id });
     expect(read?.source).toBe('ui');
     expect(read?.automations?.[0]?.amount).toBe(100000);
     expect(await refusal(() => mcp.call('actual_categories_set_automations', { categoryId: '00000000-0000-4000-8000-000000000000', automations: [] }))).toMatch(/not found/i);
-    await mcp.call('actual_categories_set_automations', { categoryId: category.id, automations: [] });
-    await mcp.call('actual_notes_update', { id: category.id, note: '#template 50' });
-    const reset = await mcp.call('actual_categories_get_automations', { categoryId: category.id });
-    if (reset?.source === 'notes') {
-      expect(await refusal(() => mcp.call('actual_categories_set_automations', { categoryId: category.id, automations: [] }))).toMatch(/confirmNoteSwitch/);
-    }
+    const cleared = await mcp.call('actual_categories_set_automations', { categoryId: category.id, automations: [] });
+    expect(cleared?.verified, 'a clear reads back as verified').toBe(true);
+    expect(cleared?.automations).toEqual([]);
   });
 
   test('actual_entities_search - finds a seeded payee and returns nothing for a nonsense query', async ({ mcp, makePayee }) => {
