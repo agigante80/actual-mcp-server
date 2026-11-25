@@ -17,7 +17,7 @@
 
 import { noteTolerated } from '../assert.js';
 
-const EXPECTED_TOOL_COUNT = parseInt(process.env.EXPECTED_TOOL_COUNT || '88', 10);
+const EXPECTED_TOOL_COUNT = parseInt(process.env.EXPECTED_TOOL_COUNT || '89', 10);
 
 /**
  * @param {{ listTools: Function, callTool: Function }} client

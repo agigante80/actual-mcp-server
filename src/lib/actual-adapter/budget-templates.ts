@@ -12,6 +12,24 @@ export const GOAL_TEMPLATES_FLAG = 'flags.goalTemplatesEnabled';
 export const GOAL_TEMPLATES_DISABLED_MESSAGE =
   'Goal templates are not enabled in this budget. In Actual, turn on Settings > Experimental features > Goal templates, then retry. Nothing was changed.';
 
+/**
+ * #842: the synced preference behind the automations editor (`FeatureFlag goalTemplatesUIEnabled`
+ * in @actual-app/core, not in the api bundle). Upstream does not enforce it on the save handler.
+ */
+export const GOAL_TEMPLATES_UI_FLAG = 'flags.goalTemplatesUIEnabled';
+
+export const AUTOMATIONS_UI_DISABLED_MESSAGE =
+  'The automations editor is not enabled in this budget (setting flags.goalTemplatesUIEnabled). In Actual, turn it on under Settings > Experimental features, then retry. Nothing was changed.';
+
+export const NOTE_SWITCH_MESSAGE =
+  "This category's automations come from its #template, #goal or #cleanup note lines. Saving switches it to the automations editor: those lines stop being read (the note text is kept, and its cleanup stays as last stored). Pass confirmNoteSwitch: true (manage_categories: confirm_note_switch) to confirm. Nothing was changed.";
+
+export const UNNAMED_SCHEDULE_MESSAGE = (id: string): string =>
+  `Schedule "${id}" has no name, and Actual matches schedule automations by name: name it in Actual first. Nothing was changed.`;
+
+export const PERCENTAGE_SOURCE_MESSAGE = (id: string): string =>
+  `percentage category "${id}" is not an income category: use an income category id, "all income" or "available funds". Nothing was changed.`;
+
 export const TRACKING_BUDGET_MESSAGE =
   'Budget templates and cleanup need an envelope budget; this budget is a tracking budget. Nothing was changed.';
 
@@ -193,4 +211,36 @@ export async function readUntilSettled(
     last = current;
     if (equal && clock.now() - startedAt >= timing.floorMs) return { rows: current, settled: true };
   }
+}
+
+/**
+ * #842: read until `matches` accepts the read (a stored value equal to what was sent), bounded as
+ * readUntilSettled is. No floor: a match IS the proof the raw write landed. Returns the last read
+ * and whether it matched; a read that throws propagates.
+ */
+export async function readUntilMatches<T>(
+  read: () => Promise<T>,
+  matches: (value: T) => boolean,
+  timing: SettleTiming,
+  deadline: number,
+  clock: { now: () => number; sleep: (ms: number) => Promise<void> } = realClock,
+): Promise<{ value: T; matched: boolean }> {
+  const startedAt = clock.now();
+  const stopAt = deadline > 0 ? Math.min(startedAt + timing.boundMs, deadline) : startedAt + timing.boundMs;
+  let last = await read();
+  for (;;) {
+    if (matches(last)) return { value: last, matched: true };
+    if (clock.now() >= stopAt) return { value: last, matched: false };
+    await clock.sleep(Math.max(0, Math.min(timing.intervalMs, stopAt - clock.now())));
+    last = await read();
+  }
+}
+
+/** JSON with object keys sorted, so two stored forms compare equal whatever their key order. */
+export function canonicalJson(value: unknown): string {
+  const sort = (v: unknown): unknown =>
+    Array.isArray(v) ? v.map(sort)
+    : v !== null && typeof v === 'object' ? Object.fromEntries(Object.entries(v as Record<string, unknown>).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)).map(([k, x]) => [k, sort(x)]))
+    : v;
+  return JSON.stringify(sort(value));
 }

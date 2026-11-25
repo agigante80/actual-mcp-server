@@ -152,6 +152,7 @@ const DESTRUCTIVE = new Set<string>([
   // #841: apply_templates REPLACES budgeted amounts (and can lower them); run_cleanup moves money between categories. Neither is idempotent.
   'actual_budgets_apply_templates',
   'actual_budgets_run_cleanup',
+  'actual_categories_set_automations',
   'actual_budgets_export',
   // #687: the import replaces nothing, but it is irreversible from here (it adds a server budget
   // file no tool removes), so the hint stays to make a client ask first.
@@ -279,6 +280,8 @@ const IDEMPOTENT = new Set<string>([
   'actual_budgets_set_carryover',
   'actual_budgets_switch',
   'actual_categories_delete',
+  // #842: saves the whole list, so a repeat stores the same value.
+  'actual_categories_set_automations',
   'actual_categories_update',
   'actual_category_groups_delete',
   'actual_category_groups_update',

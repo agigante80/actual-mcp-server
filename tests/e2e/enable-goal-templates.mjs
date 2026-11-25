@@ -18,7 +18,8 @@ import { join } from 'node:path';
 // `internal` stays null for ever and the send below throws on null (first real run of #841).
 import api from '@actual-app/api';
 
-const FLAG = 'flags.goalTemplatesEnabled';
+// #842: the automations editor save needs the second flag as well.
+const FLAGS = ['flags.goalTemplatesEnabled', 'flags.goalTemplatesUIEnabled'];
 const serverURL = process.env.ACTUAL_SERVER_URL;
 const password = process.env.ACTUAL_PASSWORD;
 const syncIdFile = process.env.SYNC_ID_FILE || '/tmp/actual-sync-id.txt';
@@ -37,14 +38,16 @@ try {
   const internal = await api.init({ dataDir, serverURL, password });
   if (!internal || typeof internal.send !== 'function') throw new Error('api.init() returned no internal handle');
   await api.downloadBudget(syncId);
-  await internal.send('preferences/save', { id: FLAG, value: 'true' });
-  // Read it back from the budget itself, then push the change to the server.
-  const { data } = await api.runQuery(api.q('preferences').filter({ id: FLAG }).select('*'));
-  if (!data || data.length !== 1 || data[0].value !== 'true') {
-    throw new Error(`the preference did not read back as "true": ${JSON.stringify(data)}`);
+  for (const FLAG of FLAGS) {
+    await internal.send('preferences/save', { id: FLAG, value: 'true' });
+    // Read it back from the budget itself, then push the change to the server.
+    const { data } = await api.runQuery(api.q('preferences').filter({ id: FLAG }).select('*'));
+    if (!data || data.length !== 1 || data[0].value !== 'true') {
+      throw new Error(`the preference ${FLAG} did not read back as "true": ${JSON.stringify(data)}`);
+    }
   }
   await api.sync();
-  console.log(`enable-goal-templates: ${FLAG} is "true" and synced to ${serverURL}`);
+  console.log(`enable-goal-templates: ${FLAGS.join(' and ')} are "true" and synced to ${serverURL}`);
 } catch (err) {
   console.error(`enable-goal-templates: FAILED: ${err && err.message ? err.message : err}`);
   code = 1;

@@ -93,3 +93,52 @@ export async function categoryAutomationsTests(client, context) { // eslint-disa
     else fail(`category_automations [unknown id]: unexpected error: ${err.message}`);
   }
 }
+
+/**
+ * #842: manage_categories action set_automations against the LIVE server. NEGATIVES ONLY: the live
+ * budget's flag state is unknown, and a positive save would switch a real category to the editor.
+ * Skips loudly when the action is not published. Nothing is written: every call here is refused
+ * before anything is sent.
+ *
+ * @param {{ listTools: Function, callTool: Function }} client
+ */
+export async function setAutomationsTests(client) {
+  const { listTools, callTool } = client;
+  console.log('\n-- Running SET AUTOMATIONS TESTS (#842, experimental) --');
+
+  const tools = await listTools();
+  const tool = tools.find((t) => t.name === 'manage_categories');
+  if (!tool?.inputSchema?.properties?.action?.enum?.includes('set_automations')) {
+    skip('manage_categories set_automations is not published by this server (MCP_EXPERIMENTAL does not name budget_automations)');
+    return;
+  }
+  const zero = '00000000-0000-4000-8000-000000000000';
+
+  // I1: an unknown category (or a budget with the editor off) is a refusal.
+  try {
+    const res = await callTool('manage_categories', { action: 'set_automations', id: zero, automations: [] });
+    fail(`set_automations [unknown id]: did not refuse: ${JSON.stringify(res?.result ?? res).slice(0, 200)}`);
+  } catch (err) {
+    if (/not found|not enabled/.test(err.message)) console.log('  ok set_automations [unknown id]: refused');
+    else fail(`set_automations [unknown id]: unexpected error: ${err.message}`);
+  }
+
+  // I2: an unknown automation type is a schema refusal.
+  try {
+    await callTool('manage_categories', { action: 'set_automations', id: zero, automations: [{ type: 'nope' }] });
+    fail('set_automations [unknown type]: did not refuse');
+  } catch (err) {
+    if (/type/.test(err.message)) console.log('  ok set_automations [unknown type]: refused naming type');
+    else fail(`set_automations [unknown type]: unexpected error: ${err.message}`);
+  }
+
+  // I3: two limits are refused by the combination rule.
+  try {
+    const limit = { type: 'limit', amount: 100, period: 'monthly' };
+    await callTool('manage_categories', { action: 'set_automations', id: zero, automations: [limit, limit] });
+    fail('set_automations [two limits]: did not refuse');
+  } catch (err) {
+    if (/only one limit/.test(err.message)) console.log('  ok set_automations [two limits]: refused');
+    else fail(`set_automations [two limits]: unexpected error: ${err.message}`);
+  }
+}

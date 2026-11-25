@@ -18,7 +18,7 @@ WHAT IT TESTS
   Phase 7:   Transaction Summaries   (5 operations)
   Phase 8:   Budgets                 (13 operations)
   Phase 9:   Advanced Query & Sync   (2 operations)
-  Phase 9b: Notes                   (3 operations)
+  Phase 9b: Notes                   (4 operations)
   Phase 9c: Preferences              (1 operation)
   Phase 9d: Export / Import          (2 operations)
   Phase 10:  Session Management      (2 operations, legacy or all surface only)
@@ -198,7 +198,7 @@ Select a second different category for the transfer test. Save as `{budget_cat2_
 
 ---
 
-**Phase 9b: Notes (3 operations):**
+**Phase 9b: Notes (4 operations):**
 
 - manage_budget_months, action: "set_note"
   Input: { action: "set_note", month: "2026-01", note: "#template 250 MCP-Notes-{TS}" }
@@ -224,6 +224,17 @@ Select a second different category for the transfer test. Save as `{budget_cat2_
   Negative: call with category_id="00000000-0000-4000-8000-000000000000"
     Expect: a refusal saying the category was not found (an error, not a success-shaped answer)
   Cleanup: delete the disposable category, also when a check above failed (delete it before reporting)
+
+- manage_categories, action: "set_automations" (EXPERIMENTAL: published only when the server sets
+  MCP_EXPERIMENTAL=budget_automations; when "set_automations" is not in the action list, report this
+  operation as skipped, which is neither a pass nor a failure, and do not count it)
+  NEGATIVES ONLY: the live budget's setting state is unknown and a save would switch a real category.
+  Negative: { action: "set_automations", id: "00000000-0000-4000-8000-000000000000", automations: [] }
+    Expect: a refusal saying the category was not found or the editor is not enabled
+  Negative: { action: "set_automations", id: "00000000-0000-4000-8000-000000000000", automations: [{ type: "nope" }] }
+    Expect: a refusal naming type
+  Negative: two entries { type: "limit", amount: 100, period: "monthly" } in one list
+    Expect: a refusal saying only one limit is allowed
 
 ---
 
@@ -344,14 +355,14 @@ PROMPT 3 (Advanced):
   Phase 7  Transaction Summaries:     X / 5
   Phase 8  Budgets:                   X / 13   (X / 11 when the two experimental template actions were skipped)
   Phase 9  Query & Sync:              X / 2
-  Phase 9b Notes:                      X / 3   (X / 2 when category_automations was skipped)
+  Phase 9b Notes:                      X / 4   (X / 2 when category_automations and set_automations were skipped)
   Phase 9c Preferences:                X / 1
   Phase 9d Export / Import:            X / 2
   Phase 10 Session Management:        X / 2
   Phase 11 Concurrency:               Skipped / Ran (X/10)
 
 ─────────────────────────────────────────────
-  Total Tools Tested:   X / 88   (X / 85 when the three experimental operations were skipped)
+  Total Tools Tested:   X / 89   (X / 85 when the four experimental operations were skipped)
   Passed (✓):           X
   Failed (✗):           X
   Informational (ℹ):    X

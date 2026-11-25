@@ -6,7 +6,12 @@
  * Stored template amounts are CURRENCY UNITS (`#template 50` is stored as `monthly: 50`).
  * Upstream converts them with `amountToInteger(value, decimalPlaces)` using the budget's
  * `defaultCurrencyCode`; this module does the same so the output is integer minor units.
+ *
+ * The write side (#842) is at the end of this file: the strict editor-form schema a caller may
+ * save, the rules that span entries, and the conversion to the stored form.
  */
+import { z } from 'zod';
+import { CommonSchemas } from './common.js';
 
 /**
  * The only currencies with 0 decimal places in `@actual-app/api` 26.11.0 (its bundled table
@@ -209,4 +214,142 @@ export function shapeCategoryAutomations(rows: CategoryAutomationsRows): EditorA
     }
   }
   return { categoryId: rows.categoryId, source: 'ui', automations, errors, cleanup };
+}
+
+// ---------------------------------------------------------------------------------------------
+// Write side (#842). The published tool schema is a LIGHT one (type only, passthrough) to stay
+// under the per-tool byte ceiling; the tool and the compact action run THIS schema inside a
+// superRefine, and the adapter parses again so a direct call cannot skip it. Amounts here are
+// integer minor units; toStoredAutomations converts them to the currency units upstream stores.
+// ---------------------------------------------------------------------------------------------
+
+export const AUTOMATION_TYPES = ['periodic', 'limit', 'refill', 'percentage', 'average', 'by', 'remainder', 'goal', 'schedule'] as const;
+
+/** The two non-id sources a percentage may name; upstream applies both. */
+export const PERCENTAGE_SOURCES: readonly string[] = ['all income', 'available funds'];
+
+const minor = CommonSchemas.budgetAmountCents.min(0, 'amount must be at least 0');
+const priority = z.number().int().min(0).max(1000).default(1);
+/** limit and remainder store `priority: null`; the read side returns it as stored, so only null is accepted back. */
+const nullPriority = z.null().optional();
+const description = z.string().max(1000).optional();
+const templateDirective = z.literal('template').optional();
+
+const periodic = z.strictObject({
+  type: z.literal('periodic'),
+  directive: templateDirective,
+  amount: minor,
+  period: z.strictObject({ period: z.enum(['day', 'week', 'month', 'year']), amount: z.number().int().min(1).max(1000) }),
+  starting: CommonSchemas.date,
+  priority,
+  description,
+});
+const limit = z.strictObject({
+  type: z.literal('limit'),
+  directive: templateDirective,
+  amount: minor,
+  period: z.enum(['daily', 'weekly', 'monthly']),
+  hold: z.boolean().default(false),
+  start: CommonSchemas.date.optional(),
+  priority: nullPriority,
+  description,
+}).superRefine((v, ctx) => {
+  if (v.period === 'weekly' && v.start === undefined) ctx.addIssue({ code: 'custom', message: 'a weekly limit needs start (YYYY-MM-DD).' });
+});
+const refill = z.strictObject({ type: z.literal('refill'), directive: templateDirective, priority, description });
+const percentage = z.strictObject({
+  type: z.literal('percentage'),
+  directive: templateDirective,
+  percent: z.number().gt(0).max(100),
+  previous: z.boolean().default(false),
+  category: z.union([z.literal('all income'), z.literal('available funds'), CommonSchemas.categoryId]),
+  priority,
+  description,
+  /** Added by the read side; accepted and dropped so a read result can be sent back. */
+  categoryName: z.string().optional(),
+});
+const average = z.strictObject({ type: z.literal('average'), directive: templateDirective, numMonths: z.number().int().min(1).max(120), priority, description });
+const by = z.strictObject({
+  type: z.literal('by'),
+  directive: templateDirective,
+  amount: minor,
+  month: CommonSchemas.monthYear,
+  annual: z.boolean().default(false),
+  repeat: z.number().int().min(1).max(1200).optional(),
+  priority,
+  description,
+});
+const remainder = z.strictObject({ type: z.literal('remainder'), directive: templateDirective, weight: z.number().int().min(1).max(1000), priority: nullPriority, description });
+const goal = z.strictObject({ type: z.literal('goal'), directive: z.literal('goal').optional(), amount: minor, description });
+const schedule = z.strictObject({
+  type: z.literal('schedule'),
+  directive: templateDirective,
+  scheduleId: CommonSchemas.scheduleId.optional(),
+  name: z.string().min(1).optional(),
+  priority,
+  description,
+}).superRefine((v, ctx) => {
+  if ((v.scheduleId === undefined) === (v.name === undefined)) ctx.addIssue({ code: 'custom', message: 'give exactly one of scheduleId or name.' });
+});
+
+export const EDITOR_AUTOMATION = z.discriminatedUnion('type', [periodic, limit, refill, percentage, average, by, remainder, goal, schedule]);
+export type EditorAutomation = z.infer<typeof EDITOR_AUTOMATION>;
+
+/** Pinned by tests. */
+export const COMBINATION_MESSAGES = {
+  oneLimit: 'only one limit is allowed per category.',
+  oneGoal: 'only one goal is allowed per category.',
+  refillNeedsLimit: 'refill needs a limit in the same list.',
+  percentOver: 'percentages of one income source total more than 100.',
+  sharedPriority: 'schedule and by entries must share one priority.',
+} as const;
+
+/** The whole list: at most 50 entries, each strict, and the rules that span entries. */
+export const EDITOR_AUTOMATIONS = z.array(EDITOR_AUTOMATION).max(50).superRefine((list, ctx) => {
+  const issue = (message: string) => ctx.addIssue({ code: 'custom', message });
+  const count = (type: string) => list.filter((e) => e.type === type).length;
+  if (count('limit') > 1) issue(COMBINATION_MESSAGES.oneLimit);
+  if (count('goal') > 1) issue(COMBINATION_MESSAGES.oneGoal);
+  if (count('refill') > 0 && count('limit') === 0) issue(COMBINATION_MESSAGES.refillNeedsLimit);
+  const totals = new Map<string, number>();
+  for (const e of list) if (e.type === 'percentage') totals.set(e.category, (totals.get(e.category) ?? 0) + e.percent);
+  if ([...totals.values()].some((t) => t > 100)) issue(COMBINATION_MESSAGES.percentOver);
+  const shared = new Set<number>();
+  for (const e of list) if (e.type === 'schedule' || e.type === 'by') shared.add(e.priority);
+  if (shared.size > 1) issue(COMBINATION_MESSAGES.sharedPriority);
+});
+
+/** Parse a caller list (throws ZodError, paths relative to the list). The input is never mutated. */
+export function parseEditorAutomations(input: unknown): EditorAutomation[] {
+  return EDITOR_AUTOMATIONS.parse(input);
+}
+
+/** Minor units to the currency units upstream stores: 5000 USD cents is 50, 5000 JPY is 5000. */
+export function toStoredUnits(minorAmount: number, currencyCode: unknown): number {
+  return minorAmount / 10 ** currencyDecimalPlaces(currencyCode);
+}
+
+/**
+ * The stored form of validated entries. `directive` is set here (upstream ignores an entry
+ * without it), money is in currency units, a schedule is stored by NAME (`scheduleNames` maps the
+ * list index to the live schedule's name), `categoryName` is dropped, and limit and remainder
+ * carry `priority: null`. Returns new objects.
+ */
+export function toStoredAutomations(
+  list: readonly EditorAutomation[],
+  currencyCode: unknown,
+  scheduleNames: ReadonlyMap<number, string> = new Map(),
+): Array<Record<string, unknown>> {
+  return list.map((entry, index) => {
+    const { type, directive: _directive, description: text, ...rest } = entry as Entry & { type: string };
+    const head = { type, directive: type === 'goal' ? 'goal' : 'template' };
+    const tail = text !== undefined ? { description: text } : {};
+    if (type === 'schedule') {
+      return { ...head, name: scheduleNames.get(index) ?? rest.name, priority: rest.priority, ...tail };
+    }
+    const { categoryName: _categoryName, priority: _priority, ...fields } = rest;
+    if (typeof fields.amount === 'number') fields.amount = toStoredUnits(fields.amount, currencyCode);
+    const stored = type === 'limit' || type === 'remainder' ? { priority: null } : type === 'goal' ? {} : { priority: _priority };
+    return { ...head, ...fields, ...stored, ...tail };
+  });
 }

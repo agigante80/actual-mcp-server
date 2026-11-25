@@ -73,7 +73,7 @@ const {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
 } = api as any;
 import { EventEmitter } from 'events';
-import { shapeCategoryAutomations, templateSource, type EditorAutomations, type NoteAutomations } from './schemas/automations.js';
+import { parseEditorAutomations, parseJsonColumn, shapeCategoryAutomations, templateSource, toStoredAutomations, PERCENTAGE_SOURCES, type EditorAutomations, type NoteAutomations } from './schemas/automations.js';
 import observability from '../observability.js';
 import { retry, isRetryableError, isRateLimitError } from './retry.js';
 import { withOpTimeout, runAbandonable, assertOperationLive } from './opTimeout.js';
@@ -81,7 +81,7 @@ import { markInitFailure } from './init-failure.js';
 import { MAX_BUDGET_AMOUNT_CENTS } from './budget-limits.js';
 import { incomeSetAmountRefusal, incomeTransferRefusal, isTrackingBudgetMonth } from './actual-adapter/budget-income.js';
 import {
-  DEFAULT_SETTLE, GOAL_TEMPLATES_DISABLED_MESSAGE, GOAL_TEMPLATES_FLAG, KNOWN_APPLY_REPLIES, KNOWN_CLEANUP_REPLIES, TRACKING_BUDGET_MESSAGE,
+  AUTOMATIONS_UI_DISABLED_MESSAGE, DEFAULT_SETTLE, GOAL_TEMPLATES_DISABLED_MESSAGE, GOAL_TEMPLATES_FLAG, GOAL_TEMPLATES_UI_FLAG, KNOWN_APPLY_REPLIES, NOTE_SWITCH_MESSAGE, PERCENTAGE_SOURCE_MESSAGE, UNNAMED_SCHEDULE_MESSAGE, canonicalJson, readUntilMatches, KNOWN_CLEANUP_REPLIES, TRACKING_BUDGET_MESSAGE,
   assertMonthInRange, diffMonthRows, isFlagOn, matchingCheckEntries, monthCategoryRows, readReply, readUntilSettled, templateCheckMessage,
   type BudgetChange,
 } from './actual-adapter/budget-templates.js';
@@ -6357,39 +6357,49 @@ export async function getPreferences(): Promise<Record<string, unknown>> {
 export async function getCategoryAutomations(categoryId: string): Promise<EditorAutomations | NoteAutomations> {
   return withActualApi(async () => {
     observability.incrementToolCall('actual.categories.get_automations').catch(() => {});
-    const { q } = (await import('@actual-app/api')) as any; // eslint-disable-line @typescript-eslint/no-explicit-any
-    const read = (query: unknown): Promise<Array<Record<string, unknown>>> =>
-      withConcurrency(() => retry(async () => {
-        const res = (await rawRunQuery(query)) as { data?: Array<Record<string, unknown>> } | undefined;
-        return res?.data ?? [];
-      }, { retries: 2, backoffMs: 200 }));
-
-    const [category] = await read(q('categories').filter({ id: categoryId }).select(['id', 'template_settings', 'goal_def', 'cleanup_def']));
-    if (!category) throw new NotFoundRefusal('Category', categoryId, 'actual_categories_get');
-
-    const groups = await read(q('cleanup_groups').select(['id', 'name']));
-    const prefs = await withConcurrency(() => retry(() => rawGetPreferences() as Promise<Record<string, unknown> | null>, { retries: 2, backoffMs: 200, isRetryable: isRetryableError }));
-    // A percentage entry names an income category, so the names are read only when one could resolve.
-    const needsNames = typeof category.goal_def === 'string' && category.goal_def.includes('"percentage"');
-    const categories = needsNames ? await read(q('categories').select(['id', 'name'])) : [];
-    const noteManaged = templateSource(category.template_settings) === 'notes';
-    const noteRow = noteManaged
-      ? await withConcurrency(() => retry(() => rawGetNote(categoryId) as Promise<{ id: string; note: string } | null>, { retries: 2, backoffMs: 200 }))
-      : null;
-
-    const names = (rows: Array<Record<string, unknown>>): Map<string, string> =>
-      new Map(rows.filter((r) => typeof r.id === 'string' && typeof r.name === 'string').map((r) => [r.id as string, r.name as string]));
-    return shapeCategoryAutomations({
-      categoryId,
-      templateSettings: category.template_settings,
-      goalDef: category.goal_def,
-      cleanupDef: category.cleanup_def,
-      note: noteRow?.note ?? null,
-      currencyCode: prefs?.defaultCurrencyCode,
-      cleanupGroupNames: names(groups),
-      categoryNames: names(categories),
-    });
+    return (await loadCategoryAutomations(categoryId)).result;
   });
+}
+
+/**
+ * The read body of getCategoryAutomations, WITHOUT a session of its own, so the save (#842) can run
+ * it inside its write operation: nesting `getCategoryAutomations` there would stall on the api
+ * lock. Returns the shaped result and the raw stored columns the save compares against.
+ */
+async function loadCategoryAutomations(categoryId: string): Promise<{ result: EditorAutomations | NoteAutomations; goalDef: unknown; templateSettings: unknown; currencyCode: unknown }> {
+  const { q } = (await import('@actual-app/api')) as any; // eslint-disable-line @typescript-eslint/no-explicit-any
+  const read = (query: unknown): Promise<Array<Record<string, unknown>>> =>
+    withConcurrency(() => retry(async () => {
+      const res = (await rawRunQuery(query)) as { data?: Array<Record<string, unknown>> } | undefined;
+      return res?.data ?? [];
+    }, { retries: 2, backoffMs: 200 }));
+
+  const [category] = await read(q('categories').filter({ id: categoryId }).select(['id', 'template_settings', 'goal_def', 'cleanup_def']));
+  if (!category) throw new NotFoundRefusal('Category', categoryId, 'actual_categories_get');
+
+  const groups = await read(q('cleanup_groups').select(['id', 'name']));
+  const prefs = await withConcurrency(() => retry(() => rawGetPreferences() as Promise<Record<string, unknown> | null>, { retries: 2, backoffMs: 200, isRetryable: isRetryableError }));
+  // A percentage entry names an income category, so the names are read only when one could resolve.
+  const needsNames = typeof category.goal_def === 'string' && category.goal_def.includes('"percentage"');
+  const categories = needsNames ? await read(q('categories').select(['id', 'name'])) : [];
+  const noteManaged = templateSource(category.template_settings) === 'notes';
+  const noteRow = noteManaged
+    ? await withConcurrency(() => retry(() => rawGetNote(categoryId) as Promise<{ id: string; note: string } | null>, { retries: 2, backoffMs: 200 }))
+    : null;
+
+  const names = (rows: Array<Record<string, unknown>>): Map<string, string> =>
+    new Map(rows.filter((r) => typeof r.id === 'string' && typeof r.name === 'string').map((r) => [r.id as string, r.name as string]));
+  const result = shapeCategoryAutomations({
+    categoryId,
+    templateSettings: category.template_settings,
+    goalDef: category.goal_def,
+    cleanupDef: category.cleanup_def,
+    note: noteRow?.note ?? null,
+    currencyCode: prefs?.defaultCurrencyCode,
+    cleanupGroupNames: names(groups),
+    categoryNames: names(categories),
+  });
+  return { result, goalDef: category.goal_def, templateSettings: category.template_settings, currencyCode: prefs?.defaultCurrencyCode };
 }
 
 /**
@@ -6397,7 +6407,7 @@ export async function getCategoryAutomations(categoryId: string): Promise<Editor
  * upstream's internal handler bus (`api.internal.send`), which the public api does not wrap. This is
  * the ONE place that touches it, and it is closed: a name outside INTERNAL_SEND_ALLOWED is refused
  * before anything is sent, whatever the caller (or a later ticket) passes. #842 adds its handlers
- * here, one reviewed line each. The allow-list check sits OUTSIDE the replaceable function so a test
+ * here, one reviewed line each (#842 added budget/set-category-automations). The allow-list check sits OUTSIDE the replaceable function so a test
  * double cannot bypass it. The send is a write path: it goes through assertOperationLive like every
  * guarded raw write, so an abandoned operation cannot send.
  */
@@ -6407,6 +6417,7 @@ const INTERNAL_SEND_ALLOWED: ReadonlySet<string> = new Set([
   'budget/overwrite-goal-template',
   'budget/apply-single-template',
   'budget/cleanup-goal-template',
+  'budget/set-category-automations',
 ]);
 
 type InternalSendImpl = (name: string, args?: unknown) => Promise<unknown>;
@@ -6436,7 +6447,7 @@ export async function internalSend(name: string, args?: unknown): Promise<unknow
 
 /**
  * Whether a synced budget flag (a row of the `preferences` AQL table, stored as text) is on. A new
- * experimental feature that depends on a flag reads it through here (#842 will). Inside one api
+ * experimental feature that depends on a flag reads it through here (#842 does). Inside one api
  * cycle: it uses the raw binding, never an exported adapter method.
  */
 async function isBudgetFlagOn(flagId: string): Promise<boolean> {
@@ -6564,6 +6575,101 @@ export async function runBudgetCleanup(month: string): Promise<BudgetTemplateRes
   return queueWriteOperation(() => runTemplateWrite('cleanup', month, {}), { preservesListings: ['accounts', 'categories', 'categoryGroups', 'payees'] });
 }
 
+export interface SetCategoryAutomationsInput {
+  categoryId: string;
+  /** The editor-form list; validated here whatever the caller did, and never mutated. */
+  automations: unknown;
+  confirmNoteSwitch?: boolean;
+}
+
+/** The read side's shape after the save, plus whether the stored value was seen to match. */
+export type SavedCategoryAutomations = (EditorAutomations | NoteAutomations) & { verified: boolean };
+
+/**
+ * Experimental feature `budget_automations` (#842): save one category's automations in the
+ * editor form. The list is validated BEFORE anything is queued; every guard then runs inside the
+ * one write operation, ahead of the single send. Cleanup and `source` are never sent: the adapter
+ * fixes `source` to `ui` and omits `cleanup` (an empty one would clear the stored cleanup).
+ */
+export async function setCategoryAutomations(input: SetCategoryAutomationsInput): Promise<SavedCategoryAutomations> {
+  observability.incrementToolCall('actual.categories.setAutomations').catch(() => {});
+  const parsed = parseEditorAutomations(input.automations);
+  return queueWriteOperation(
+    () => runSetCategoryAutomations(input.categoryId, parsed, input.confirmNoteSwitch === true),
+    { preservesListings: ['accounts', 'categories', 'categoryGroups', 'payees'] },
+  );
+}
+
+/** Guard order: goal templates flag, UI flag, category, note switch, schedules, percentage sources; then one send and a read-back. */
+async function runSetCategoryAutomations(
+  categoryId: string,
+  parsed: ReturnType<typeof parseEditorAutomations>,
+  confirmNoteSwitch: boolean,
+): Promise<SavedCategoryAutomations> {
+  const opStartedAt = Date.now();
+  const read = <R>(fn: () => Promise<R>): Promise<R> =>
+    withConcurrency(() => retry(fn, { retries: 2, backoffMs: 200, isRetryable: isRetryableError }));
+
+  // 1 and 2. Upstream enforces neither flag on this handler, so the adapter does.
+  if (!(await isBudgetFlagOn(GOAL_TEMPLATES_FLAG))) throw new FeatureDisabledRefusal(GOAL_TEMPLATES_DISABLED_MESSAGE);
+  if (!(await isBudgetFlagOn(GOAL_TEMPLATES_UI_FLAG))) throw new FeatureDisabledRefusal(AUTOMATIONS_UI_DISABLED_MESSAGE);
+
+  // 3. The category (upstream saves for an id that does not exist, and the next apply skips it).
+  const existing = await loadCategoryAutomations(categoryId);
+
+  // 4. The one-way switch: only when a note line would really be read.
+  if (existing.result.source === 'notes' && existing.result.noteDirectives.length > 0 && !confirmNoteSwitch) {
+    throw new OutOfRangeRefusal(NOTE_SWITCH_MESSAGE, categoryId);
+  }
+
+  // 5. Schedules: matched by NAME upstream, so each must be live and named. The name is what is stored.
+  const scheduleNames = new Map<number, string>();
+  if (parsed.some((e) => e.type === 'schedule')) {
+    const schedules = (await read(() => rawGetSchedules() as Promise<unknown[]>)) as Array<{ id?: string; name?: string | null; tombstone?: unknown }>;
+    const live = (Array.isArray(schedules) ? schedules : []).filter((s) => !s?.tombstone);
+    parsed.forEach((entry, index) => {
+      if (entry.type !== 'schedule') return;
+      if (entry.scheduleId !== undefined) {
+        const row = live.find((s) => s.id === entry.scheduleId);
+        if (!row) throw new NotFoundRefusal('Schedule', entry.scheduleId, 'actual_schedules_get');
+        if (typeof row.name !== 'string' || row.name.trim() === '') throw new OutOfRangeRefusal(UNNAMED_SCHEDULE_MESSAGE(entry.scheduleId), entry.scheduleId);
+        scheduleNames.set(index, row.name);
+      } else {
+        const row = live.find((s) => typeof s.name === 'string' && s.name.trim() !== '' && s.name === entry.name);
+        if (!row) throw new NotFoundRefusal('Schedule', String(entry.name), 'actual_schedules_get');
+        scheduleNames.set(index, row.name as string);
+      }
+    });
+  }
+
+  // 6. Percentage sources: an income category id, or one of the two literals.
+  const sources = [...new Set(parsed.flatMap((e) => (e.type === 'percentage' && !PERCENTAGE_SOURCES.includes(e.category) ? [e.category] : [])))];
+  if (sources.length > 0) {
+    const categories = await read(() => readDrainListing('categories', () => rawGetCategories() as Promise<Array<{ id?: string; is_income?: boolean }>>));
+    for (const id of sources) {
+      const row = (categories as Array<{ id?: string; is_income?: boolean }>).find((c) => c.id === id);
+      if (!row) throw new NotFoundRefusal('Category', id, 'actual_categories_get');
+      if (!row.is_income) throw new OutOfRangeRefusal(PERCENTAGE_SOURCE_MESSAGE(id), id);
+    }
+  }
+
+  // The write: once, never retried, `source` fixed and no `cleanup` key.
+  const templates = toStoredAutomations(parsed, existing.currencyCode, scheduleNames);
+  await internalSend('budget/set-category-automations', { categoriesWithTemplates: [{ id: categoryId, templates }], source: 'ui' });
+
+  // The result: the read side's shape, once the stored column shows what was sent (a raw write lands late, #493).
+  const T = config.ACTUAL_OP_TIMEOUT_MS;
+  const deadline = T > 0 ? opStartedAt + Math.floor(T / 2) : 0;
+  const sent = canonicalJson(templates);
+  const { value, matched } = await readUntilMatches(
+    () => loadCategoryAutomations(categoryId),
+    (v) => templateSource(v.templateSettings) === 'ui' && canonicalJson(parseJsonColumn(v.goalDef).parsed) === sent,
+    DEFAULT_SETTLE,
+    deadline,
+  );
+  return { ...value.result, verified: matched };
+}
+
 export default {
   getAccounts,
   resolveFilterId,
@@ -6590,6 +6696,7 @@ export default {
   getCategoryAutomations,
   applyBudgetTemplates,
   runBudgetCleanup,
+  setCategoryAutomations,
   updateNote,
   getBudgetMonths,
   getBudgetMonth,

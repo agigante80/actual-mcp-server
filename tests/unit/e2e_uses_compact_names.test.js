@@ -89,6 +89,7 @@ const LEGACY_SMOKE = [
   'actual_categories_get_automations', // #840: the experimental read tool, published only with MCP_EXPERIMENTAL
   'actual_budgets_apply_templates', // #841: experimental template writes, published only with MCP_EXPERIMENTAL
   'actual_budgets_run_cleanup', // #841
+  'actual_categories_set_automations', // #842: the experimental automations save
   'actual_notes_update', // #757: the legacy unknown-id refusal
   'actual_payee_rules_get', // #818: the legacy unknown-payee refusal
   'actual_entities_search',

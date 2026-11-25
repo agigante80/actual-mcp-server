@@ -107,6 +107,7 @@ const IMPLEMENTED_TOOLS = [
   'actual_categories_get_automations',
   'actual_budgets_apply_templates',
   'actual_budgets_run_cleanup',
+  'actual_categories_set_automations',
   'actual_budgets_export',
   'actual_budgets_import',
   'actual_preferences_get',

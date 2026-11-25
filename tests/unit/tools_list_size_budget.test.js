@@ -133,7 +133,10 @@ const PER_TOOL_CEILING = 3900;
 // Review of PR 844: the cleanup description gained one sentence (cleanup also covers every overspent
 // category from To Budget). Measured with the feature on: 88 tools, 132,718 bytes (132,587 before,
 // 131 added); the ceiling is that plus 8.
-const EXPERIMENTAL_TOTAL_CEILING = 132726;
+// #842 adds actual_categories_set_automations to the same feature. Measured with the feature on: 89 tools,
+// 135,670 bytes (132,718 before, 2,952 added), heaviest entry unchanged and under the per-tool ceiling;
+// the ceiling is that plus 8.
+const EXPERIMENTAL_TOTAL_CEILING = 135678;
 // The ceiling for the compact tools COMBINED (what the `compact` surface lists; the design
 // record plans 15). The per-tool ceiling above applies to each compact entry unchanged. The
 // `all` surface lists both, so its budget is the sum of the two ceilings, never a third number.
@@ -148,7 +151,9 @@ const EXPERIMENTAL_TOTAL_CEILING = 132726;
 // #678 (manage_budget_months, manage_budget_files) completed the fifteen-tool compact surface at 40681 bytes, so the ceiling is that plus about 10%.
 // #679 (set_note routing sentences in manage_accounts, manage_categories, manage_payees) grew the fifteen-tool total from 40681 to 41000 bytes (319 more), so the ceiling rose by the same 319, from 44800 to 45119.
 // Each later compact ticket raises it by its own measured size, stated here.
-const COMPACT_TOTAL_CEILING = 45119;
+// #842 (the manage_categories set_automations action, published when the feature is on) measured the
+// compact total at 46,033 bytes with it published (44,440 default, unchanged); the ceiling is that plus 8.
+const COMPACT_TOTAL_CEILING = 46041;
 
 const sizeOf = (value) => Buffer.byteLength(JSON.stringify(value));
 

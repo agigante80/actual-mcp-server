@@ -165,7 +165,7 @@ await check('published schema: flat, action required, no oneOf or anyOf, every p
   assert.strictEqual(js.anyOf, undefined);
   assert.ok(!/oneOf|anyOf/.test(JSON.stringify(js.properties)), 'no oneOf or anyOf in any property');
   assert.deepStrictEqual(js.required, ['action']);
-  assert.deepStrictEqual(js.properties.action.enum, ['create', 'update', 'delete', 'set_note']);
+  assert.deepStrictEqual(js.properties.action.enum, ['create', 'update', 'delete', 'set_note', 'set_automations']);
   for (const [k, v] of Object.entries(js.properties)) {
     if (k === 'action') continue;
     assert.ok(v.description, `${k} has no description`);
@@ -184,8 +184,45 @@ await check('annotations: destructive write tool, hints only', () => {
   assert.deepStrictEqual(annotationsFor('manage_categories'), { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false });
 });
 await check('compactLegacyNames covers the targets, all write-capable', () => {
-  assert.deepStrictEqual([...compactLegacyNames(spec)].sort(), ['actual_categories_create','actual_categories_delete','actual_categories_update','actual_category_groups_create','actual_category_groups_delete','actual_category_groups_update','actual_notes_update']);
+  assert.deepStrictEqual([...compactLegacyNames(spec)].sort(), ['actual_categories_create','actual_categories_delete','actual_categories_set_automations','actual_categories_update','actual_category_groups_create','actual_category_groups_delete','actual_category_groups_update','actual_notes_update']);
   for (const n of compactLegacyNames(spec)) assert.ok(WRITE_CAPABLE.has(n), n);
+});
+
+// ---- #842 (experimental): set_automations ----
+
+const AUTO_LIST = [
+  { type: 'periodic', amount: 5000, period: { period: 'month', amount: 1 }, starting: '2026-12-01', priority: 1 },
+  { type: 'limit', amount: 20000, period: 'monthly' },
+];
+await check('#842 U15: set_automations renames id and confirm_note_switch and forwards the list untouched', async () => {
+  await expectCall(
+    { action: 'set_automations', id: U1, automations: AUTO_LIST, confirm_note_switch: true },
+    'actual_categories_set_automations',
+    { categoryId: U1, automations: AUTO_LIST, confirmNoteSwitch: true },
+  );
+  await expectCall(
+    { action: 'set_automations', id: U1, automations: [] },
+    'actual_categories_set_automations',
+    { categoryId: U1, automations: [] },
+  );
+});
+await check('#842 U15 NEGATIVE: set_automations refusals call nothing and name the field', async () => {
+  await refused({ action: 'set_automations', automations: [] }, /id.*required for action: set_automations/);
+  await refused({ action: 'set_automations', id: U1 }, /automations.*required for action: set_automations/);
+  await refused({ action: 'set_automations', id: 'nope', automations: [] }, /id/);
+  await refused({ action: 'set_automations', id: U1, automations: [{ type: 'bogus' }] }, /automations/);
+  await refused({ action: 'set_automations', id: U1, automations: [{ type: 'limit', amount: 1, period: 'weekly' }] }, /weekly limit needs start/);
+  await refused({ action: 'set_automations', id: U1, automations: [{ type: 'goal', amount: 1 }, { type: 'goal', amount: 2 }] }, /only one goal is allowed per category/);
+  await refused({ action: 'set_automations', id: U1, automations: [], entity: 'category' }, /entity/);
+  await refused({ action: 'set_automations', id: U1, automations: [], note: 'x' }, /note/);
+});
+await check('#842 U15: with set_automations unpublished the description names no automations clause', () => {
+  const off = spec.describeFor({ hasAction: (a) => a !== 'set_automations', hasTool: () => true });
+  assert.ok(!/automations/.test(off), 'no automations text');
+  assert.ok(off.endsWith('(set_note).'));
+  const on = spec.describeFor({ hasAction: () => true, hasTool: () => true });
+  assert.strictEqual(on, spec.description);
+  assert.ok(on.includes('set_automations (experimental)'));
 });
 
 console.log(`\n[compact-manage-categories] Results: ${passed} passed, ${failed} failed`);

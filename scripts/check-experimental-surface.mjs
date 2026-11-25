@@ -46,6 +46,7 @@ export const REQUIRED_STRINGS = [
   ['budget/overwrite-goal-template', 'the overwrite apply handler'],
   ['budget/apply-single-template', 'the single-category apply handler'],
   ['budget/cleanup-goal-template', 'the cleanup handler'],
+  ['budget/set-category-automations', 'the automations save handler'],
   ['templates-applied', 'an apply reply'],
   ['templates-up-to-date', 'an apply reply'],
   ['templates-check-passed', 'a check reply'],
