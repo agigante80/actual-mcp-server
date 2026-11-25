@@ -32,6 +32,8 @@ Every page under `docs/` is listed here, grouped by what you came to do. `npm ru
 - [architecture/README.md](architecture/README.md): architecture decision records (ADRs) and their index.
 - [architecture/0001-pr-per-code-ticket-trial-for-coderabbit-review.md](architecture/0001-pr-per-code-ticket-trial-for-coderabbit-review.md): ADR 0001, the five-ticket pull request trial for CodeRabbit review.
 - [architecture/0002-keep-the-pr-flow-for-code-tickets-maintainer-docs-stay-direct.md](architecture/0002-keep-the-pr-flow-for-code-tickets-maintainer-docs-stay-direct.md): ADR 0002, the pull request flow kept for code tickets, maintainer docs direct (supersedes ADR 0001).
+- [architecture/0003-experimental-upstream-surfaces-are-published-only-when-named-in-mcp-experimental.md](architecture/0003-experimental-upstream-surfaces-are-published-only-when-named-in-mcp-experimental.md): ADR 0003, experimental upstream surfaces are published only when named in `MCP_EXPERIMENTAL` (superseded by 0004, which restates it).
+- [architecture/0004-internal-send-seam-and-feature-disabled-refusal-move-to-ticket-2.md](architecture/0004-internal-send-seam-and-feature-disabled-refusal-move-to-ticket-2.md): ADR 0004, the internal-send seam and `FeatureDisabledRefusal` move to ticket 2 of the budget automations work.
 - [explanation/security-and-privacy.md](explanation/security-and-privacy.md): auth model, threat model and hardening.
 - [explanation/compact-tool-surface.md](explanation/compact-tool-surface.md): the 15-tool compact surface: decision record, naming rules and the mapping of all 85 tools.
 
