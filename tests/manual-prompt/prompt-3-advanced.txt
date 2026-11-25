@@ -162,13 +162,13 @@ Select a second different category for the transfer test. Save as `{budget_cat2_
   operation as skipped, which is neither a pass nor a failure, and do not count it)
   It WRITES budgeted amounts and needs Settings > Experimental features > Goal templates on in the
   budget, so run only the negatives unless the user said the test budget has that setting on.
-  Negative: { action: "apply_templates", month: "2019-01" }
+  Negative: { action: "apply_templates", month: "1899-01" }
     Expect: a refusal (the Goal templates setting is off, or the month is outside the budget's range); nothing changes
   Negative: { action: "apply_templates", month: current month, category_id: "{budget_cat_id}" }
     Expect: a refusal saying category_id needs overwrite: true (or the Goal templates refusal), nothing changes
 
 - manage_budget_months, action: "run_cleanup" (EXPERIMENTAL: same gate and skip rule as apply_templates)
-  Negative: { action: "run_cleanup", month: "2019-01" }
+  Negative: { action: "run_cleanup", month: "1899-01" }
     Expect: a refusal (the Goal templates setting is off, or the month is outside the budget's range); nothing changes
 
 ---

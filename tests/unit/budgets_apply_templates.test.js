@@ -48,6 +48,7 @@ const reset = () => {
   flagRow = 'true'; months = ['2026-10', '2026-11', '2026-12']; tracking = false; drift = false; monthReads = 0;
   names = { [RENT]: 'Rent', [FOOD]: 'Food', [FUN]: 'Fun' };
   budgeted = { [RENT]: 0, [FOOD]: 0, [FUN]: 500 };
+  notes = {}; noteReads = 0; noteBreaks = false;
   sent.length = 0; queries.length = 0; replies = defaultReplies();
 };
 const sent = [];
@@ -74,6 +75,11 @@ apiDefault.getBudgetMonth = async () => {
     ],
   };
 };
+let notes = {};
+let noteReads = 0;
+let noteBreaks = false;
+// The adapter binds getNote at import, so the stub is switched by a flag, never reassigned.
+apiDefault.getNote = async (id) => { noteReads++; if (noteBreaks) throw new Error('note read broke'); return notes[id] === undefined ? null : { id, note: notes[id] }; };
 apiDefault.getCategories = async () => Object.keys(names).map((id) => ({ id, name: names[id], group_id: 'g-exp' }));
 
 const adapterMod = await import('../../dist/src/lib/actual-adapter.js');
@@ -242,6 +248,36 @@ reset();
   replies['budget/check-templates'] = { message: 'template-errors', pre: 'Rent: bad directive\n\nRent: Insurance: other' };
   const { error } = await attempt(adapter.applyBudgetTemplates('2026-11', { categoryId: RENT, overwrite: true }));
   check(error?.message === 'Template check failed, nothing was changed. Fix these category notes in Actual, then retry:\nRent: bad directive', 'NEGATIVE: the entry of "Rent" itself still refuses, and only it is listed', error?.message);
+}
+reset();
+{
+  // Upstream writes the RAW note line after the name, so this entry is Rent's own although the
+  // sibling name claims it too. Upstream would skip the broken line on apply, so it must refuse.
+  names = { ...names, [RENT_INS]: 'Rent: Insurance' };
+  budgeted[RENT_INS] = 0;
+  notes[RENT] = '#template 50\nInsurance: #template bogus';
+  replies['budget/check-templates'] = { message: 'template-errors', pre: 'Rent: Insurance: #template bogus' };
+  const { error } = await attempt(adapter.applyBudgetTemplates('2026-11', { categoryId: RENT, overwrite: true }));
+  check(error instanceof OutOfRangeRefusal, 'NEGATIVE: an entry that is a line of the category\'s own note refuses, sibling name or not', error?.message);
+  check(error?.message === 'Template check failed, nothing was changed. Fix these category notes in Actual, then retry:\nRent: Insurance: #template bogus', 'exact message', error?.message);
+  same(sentNames(), ['budget/check-templates'], 'the apply was never sent');
+}
+reset();
+{
+  names = { ...names, [RENT_INS]: 'Rent: Insurance' };
+  budgeted[RENT_INS] = 0;
+  noteBreaks = true;
+  replies['budget/check-templates'] = { message: 'template-errors', pre: 'Rent: Insurance: bad directive' };
+  const { error } = await attempt(adapter.applyBudgetTemplates('2026-11', { categoryId: RENT, overwrite: true }));
+  check(error !== undefined, 'NEGATIVE: a failed note read stops the apply');
+  same(sentNames(), ['budget/check-templates'], 'the apply was never sent');
+  noteBreaks = false;
+}
+reset();
+{
+  replies['budget/check-templates'] = { message: 'template-errors', pre: 'Food: bad directive' };
+  await attempt(adapter.applyBudgetTemplates('2026-11', { categoryId: RENT, overwrite: true }));
+  check(noteReads === 0, 'with no sibling name the note is never read', String(noteReads));
 }
 
 // ---------------------------------------------------------------------------

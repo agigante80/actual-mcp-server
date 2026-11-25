@@ -6497,7 +6497,13 @@ async function runTemplateWrite(
   if (kind === 'apply') {
     const check = readReply(await internalSend('budget/check-templates'));
     if (check.message === 'template-errors') {
-      const entries = matchingCheckEntries(check.pre, categoryName, otherCategoryNames);
+      // The category's own note settles an entry a sibling name also claims (see matchingCheckEntries).
+      // Read only when such a sibling exists; a failed read propagates, and nothing was written yet.
+      const hasSibling = categoryName !== undefined && otherCategoryNames.some((n) => n.startsWith(`${categoryName}: `));
+      const ownNote = hasSibling
+        ? ((await read(() => rawGetNote(opts.categoryId as string) as Promise<{ id: string; note: string } | null>))?.note ?? null)
+        : undefined;
+      const entries = matchingCheckEntries(check.pre, categoryName, otherCategoryNames, ownNote);
       if (entries.length > 0) throw new OutOfRangeRefusal(templateCheckMessage(entries), month);
     }
   }

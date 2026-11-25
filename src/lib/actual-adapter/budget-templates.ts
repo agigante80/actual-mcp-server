@@ -74,18 +74,33 @@ export function splitCheckEntries(pre: string | undefined): string[] {
  * The entries that should refuse. Month-wide apply: every entry. Single-category apply: only those
  * that start with `<category name>: ` (a same-named category is included, which is accepted).
  *
- * `otherNames` are the budget's other category names. An entry that a LONGER name also claims is
- * dropped: a category "Bills: Utilities" with a broken note produces `Bills: Utilities: <error>`,
- * which also starts with `Bills: `, and must not refuse an apply on a healthy "Bills". If the
- * dropped entry was this category's after all (its error text happens to start with the other
- * name), upstream still reports it in the write's own reply, so nothing is applied silently.
+ * `otherNames` are the budget's other category names. A category "Bills: Utilities" with a broken
+ * note produces `Bills: Utilities: <error>`, which also starts with `Bills: `, and must not refuse
+ * an apply on a healthy "Bills". The name alone cannot settle whose entry it is: upstream writes
+ * the RAW note line after the name, so a "Bills" note line `Utilities: #template x` produces the
+ * same text. An entry a longer name also claims is therefore dropped only when it cannot be this
+ * category's own: its first line is not a line of `ownNote`, and it is not the missing-schedule
+ * text. With no `ownNote` given the entry is kept. This fails closed on purpose: upstream skips
+ * an unparseable line when it applies, it does not report it, so a wrongly dropped entry would
+ * apply the rest of the note in silence.
  */
-export function matchingCheckEntries(pre: string | undefined, categoryName?: string, otherNames: readonly string[] = []): string[] {
+export function matchingCheckEntries(
+  pre: string | undefined,
+  categoryName?: string,
+  otherNames: readonly string[] = [],
+  ownNote?: string | null,
+): string[] {
   const entries = splitCheckEntries(pre);
   if (categoryName === undefined) return entries;
   const prefix = `${categoryName}: `;
   const longer = otherNames.filter((n) => n.length > categoryName.length && n.startsWith(prefix));
-  return entries.filter((entry) => entry.startsWith(prefix) && !longer.some((n) => entry.startsWith(`${n}: `)));
+  const ownLines = ownNote === undefined ? undefined : new Set((ownNote ?? '').split('\n'));
+  const canBeOwn = (entry: string): boolean => {
+    if (ownLines === undefined) return true;
+    const firstLine = entry.slice(prefix.length).split('\n')[0]!;
+    return ownLines.has(firstLine) || firstLine.startsWith('Schedule "');
+  };
+  return entries.filter((entry) => entry.startsWith(prefix) && (!longer.some((n) => entry.startsWith(`${n}: `)) || canBeOwn(entry)));
 }
 
 export function templateCheckMessage(entries: readonly string[]): string {

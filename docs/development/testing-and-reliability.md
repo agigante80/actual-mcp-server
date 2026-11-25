@@ -792,7 +792,7 @@ Planned integrations:
 - **Unit Tests**: schema/shape smoke tests + 23 negative-path assertions across 88 tools
 - **Adapter Tests**: Infrastructure smoke (retry, concurrency, lifecycle), not per-tool
 - **Docker E2E**: 68/70 tools with named tests (real Actual Budget server); 2 tools excluded (`budgets_list_available` and `budgets_switch` require ≥2 budgets, and the CI stack has 1). All 6 delete tools are named tests with list-absence assertions; `afterAll` is a safety fallback only.
-- **Live Integration**: 88/88 tools called against real budget (all delete tools are named tests in `tests/manual/tests/`)
+- **Live Integration**: 88/88 tools called against real budget (all delete tools are named tests in `tests/manual/tests/`). The three experimental operations (#840, #841) are called only when the server sets `MCP_EXPERIMENTAL=budget_automations`; the two writes also need the Goal templates setting on in the budget, and `tests/manual/tests/budget_templates.js` reports them as skipped otherwise
 
 ### Coverage Goals
 
