@@ -34,6 +34,7 @@ tests/manual/
     ├── schedule.js            ← schedules: get, create (one-off + recurring), update, delete, negative UUID test
     ├── schedule_dates.js      ← schedule dates (#479): next dates, weekend move, completed, one-off, refusals
     ├── notes.js               ← notes: round-trip set/get, clear, budget-month template, orphan id guard
+    ├── category_automations.js ← experimental list_entities category_automations (#840); skipped when not published
     ├── batch_uncategorized_rules_upsert.js
     │                          ← uncategorized txns · update_batch · rules_create_or_update (idempotency)
     └── advanced.js            ← composite functions: extendedTests, fullTests,

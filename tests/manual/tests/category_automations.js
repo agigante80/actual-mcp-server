@@ -7,8 +7,9 @@
  *
  * SKIPS LOUDLY (one skip line) when the published list_entities enum does not carry
  * `category_automations`: a server without the feature is a valid configuration, and a skip
- * is neither a pass nor a failure. The release gate container sets MCP_EXPERIMENTAL
- * (tests/e2e/compose.yaml), so the module runs there.
+ * is neither a pass nor a failure. It runs in the release gate only when the gate container
+ * (the local-env compose file, outside this repo) sets MCP_EXPERIMENTAL=budget_automations;
+ * the Docker E2E stack (tests/e2e/compose.yaml) covers the action whatever that file says.
  *
  * Everything it writes is created and removed here: a DISPOSABLE group and category (never an
  * existing one, because the note is overwritten), removed in a finally.

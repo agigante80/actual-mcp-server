@@ -36,7 +36,7 @@ let category = null;       // the categories row for CAT, or null
 let currency;              // defaultCurrencyCode preference
 let note = null;           // the category note text
 const groups = [{ id: 'g1', name: 'Bills' }];
-const calls = { queries: [], getNote: 0, getPreferences: 0, send: 0, writes: 0 };
+const calls = { queries: [], getNote: 0, getPreferences: 0, writes: 0 };
 const countWrite = (name) => async () => { calls.writes++; throw new Error(`unexpected write: ${name}`); };
 
 apiDefault.sync = async () => {};
@@ -53,6 +53,9 @@ apiDefault.runQuery = async (query) => {
 };
 apiDefault.getPreferences = async () => { calls.getPreferences++; return currency === undefined ? {} : { defaultCurrencyCode: currency }; };
 apiDefault.getNote = async () => { calls.getNote++; return note === null ? null : { id: CAT, note }; };
+// The internal handler bus cannot be stubbed: `api.internal` is a non-configurable getter that is
+// null until init, which this harness skips. So a read that reached `api.internal.send` would throw a
+// TypeError and fail every value assertion below; no separate counter is kept for it.
 for (const name of ['updateCategory', 'updateNote', 'createCategory', 'deleteCategory', 'batchBudgetUpdates', 'setBudgetAmount']) {
   apiDefault[name] = countWrite(name);
 }
@@ -64,10 +67,10 @@ const { NotFoundRefusal, isPreflightRefusal } = await import('../../dist/src/lib
 
 const ui = (goal, extra = {}) => ({ id: CAT, template_settings: JSON.stringify({ source: 'ui' }), goal_def: JSON.stringify(goal), cleanup_def: null, ...extra });
 const run = async (id = CAT) => {
-  calls.queries = []; calls.getNote = 0; calls.getPreferences = 0; calls.send = 0; calls.writes = 0;
+  calls.queries = []; calls.getNote = 0; calls.getPreferences = 0; calls.writes = 0;
   try { return { value: await adapter.getCategoryAutomations(id) }; } catch (err) { return { error: err }; }
 };
-const pure = (label) => check(calls.send === 0 && calls.writes === 0, `${label}: no internal.send and no write`, JSON.stringify(calls));
+const pure = (label) => check(calls.writes === 0, `${label}: no write`, JSON.stringify(calls));
 
 console.log('\n[#840] editor-managed categories: amounts become integer minor units');
 {
@@ -155,9 +158,11 @@ console.log('\n[#840] the tool wraps the adapter result and rejects bad input');
   const out = await tool.call({ categoryId: CAT });
   check((out.result ?? out).source === 'ui', 'tool returns the adapter result');
   const bad = await tool.call({ categoryId: CAT, extra: 1 }).then(() => null, (e) => e);
-  check(bad !== null, 'NEGATIVE: an extra field is refused (strict schema)');
+  check(bad !== null && /extra/.test(String(bad.message)), 'NEGATIVE: an extra field is refused naming it (strict schema)', String(bad?.message));
   const missing = await tool.call({}).then(() => null, (e) => e);
-  check(missing !== null, 'NEGATIVE: a missing categoryId is refused');
+  check(missing !== null && /categoryId/.test(String(missing.message)), 'NEGATIVE: a missing categoryId is refused naming the field', String(missing?.message));
+  const empty = await tool.call({ categoryId: '' }).then(() => null, (e) => e);
+  check(empty !== null && /categoryId|uuid/i.test(String(empty.message)), 'NEGATIVE: an empty categoryId is refused', String(empty?.message));
 }
 
 console.log(failures === 0 ? '\nAll checks passed' : `\n${failures} check(s) failed`);

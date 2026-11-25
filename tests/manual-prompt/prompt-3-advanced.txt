@@ -209,7 +209,7 @@ Select a second different category for the transfer test. Save as `{budget_cat2_
   Positive: expect source="notes" and noteDirectives equal to ["#template 50"]
   Negative: call with category_id="00000000-0000-4000-8000-000000000000"
     Expect: a refusal saying the category was not found (an error, not a success-shaped answer)
-  Cleanup: delete the disposable category
+  Cleanup: delete the disposable category, also when a check above failed (delete it before reporting)
 
 ---
 
@@ -330,14 +330,14 @@ PROMPT 3 (Advanced):
   Phase 7  Transaction Summaries:     X / 5
   Phase 8  Budgets:                   X / 11
   Phase 9  Query & Sync:              X / 2
-  Phase 9b Notes:                      X / 3
+  Phase 9b Notes:                      X / 3   (X / 2 when category_automations was skipped)
   Phase 9c Preferences:                X / 1
   Phase 9d Export / Import:            X / 2
   Phase 10 Session Management:        X / 2
   Phase 11 Concurrency:               Skipped / Ran (X/10)
 
 ─────────────────────────────────────────────
-  Total Tools Tested:   X / 86
+  Total Tools Tested:   X / 86   (X / 85 when category_automations was skipped)
   Passed (✓):           X
   Failed (✗):           X
   Informational (ℹ):    X

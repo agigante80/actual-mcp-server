@@ -5103,10 +5103,12 @@ test.describe('Docker E2E - compact manage_categories (#676)', () => {
   });
 
   // #840: experimental feature budget_automations. Published only when MCP_EXPERIMENTAL names it
-  // (tests/e2e/compose.yaml does), so the rows skip on a server that does not publish the action.
+  // (tests/e2e/compose.yaml does), so the rows FAIL on a server that does not publish the action.
   test('list_entities category_automations - a note-managed category returns its directive lines (#840)', async ({ mcp, makeCategory, cleanup }) => {
     const entity = (await mcp.listTools()).find((t: any) => t.name === 'list_entities');
-    test.skip(!entity?.inputSchema?.properties?.type?.enum?.includes('category_automations'), 'budget_automations is not enabled on this server');
+    // The E2E stack sets MCP_EXPERIMENTAL=budget_automations (tests/e2e/compose.yaml). A missing type is a
+    // failure, not a skip: a skip would let this row stop running without anyone noticing.
+    expect(entity?.inputSchema?.properties?.type?.enum, 'the E2E stack must enable budget_automations').toContain('category_automations');
     const category = await makeCategory();
     cleanup.add(CLEANUP_ORDER.note, `note ${category.id}`, async () => {
       await mcp.call('manage_categories', { action: 'set_note', id: category.id, note: '' }).catch(() => undefined);
@@ -5122,7 +5124,9 @@ test.describe('Docker E2E - compact manage_categories (#676)', () => {
 
   test('list_entities category_automations - ERROR: an unknown id and a missing category_id are refused (#840)', async ({ mcp }) => {
     const entity = (await mcp.listTools()).find((t: any) => t.name === 'list_entities');
-    test.skip(!entity?.inputSchema?.properties?.type?.enum?.includes('category_automations'), 'budget_automations is not enabled on this server');
+    // The E2E stack sets MCP_EXPERIMENTAL=budget_automations (tests/e2e/compose.yaml). A missing type is a
+    // failure, not a skip: a skip would let this row stop running without anyone noticing.
+    expect(entity?.inputSchema?.properties?.type?.enum, 'the E2E stack must enable budget_automations').toContain('category_automations');
     expect(await refusal(() => mcp.call('list_entities', { type: 'category_automations', category_id: '00000000-0000-4000-8000-000000000000' }))).toMatch(/not found/i);
     expect(await refusal(() => mcp.call('list_entities', { type: 'category_automations' }))).toMatch(/category_id/);
   });
@@ -6660,7 +6664,8 @@ test.describe('legacy smoke (MCP_TOOL_SURFACE=all)', () => {
   // #840: the legacy tool behind list_entities category_automations; published only with MCP_EXPERIMENTAL.
   test('actual_categories_get_automations - reads a note-managed category and refuses an unknown id (#840)', async ({ mcp, makeCategory, cleanup }) => {
     const names = (await mcp.listTools()).map((t: any) => t.name);
-    test.skip(!names.includes('actual_categories_get_automations'), 'budget_automations is not enabled on this server');
+    // A failure, not a skip: the E2E stack enables the feature (tests/e2e/compose.yaml).
+    expect(names, 'the E2E stack must enable budget_automations').toContain('actual_categories_get_automations');
     const category = await makeCategory();
     cleanup.add(CLEANUP_ORDER.note, `note ${category.id}`, async () => {
       await mcp.call('manage_categories', { action: 'set_note', id: category.id, note: '' }).catch(() => undefined);

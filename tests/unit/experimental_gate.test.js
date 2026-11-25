@@ -223,6 +223,27 @@ await check('POSITIVE: compact list_entities names category_automations (enum an
   assert.ok(!('category_id' in off.properties), 'the new field is not published with the feature off');
 });
 
+await check('NEGATIVE: with the feature on, category_automations refuses an empty or missing category_id before any read', async () => {
+  await manager.initialize({ ...ALL, surface: 'compact', experimental: FEATURE });
+  const tool = manager.getTool('list_entities');
+  const empty = await tool.call({ type: 'category_automations', category_id: '' }).then(() => null, (e) => e);
+  assert.ok(empty !== null, 'an empty category_id must be refused');
+  assert.match(String(empty.message), /category_id/, String(empty.message));
+  const missing = await tool.call({ type: 'category_automations' }).then(() => null, (e) => e);
+  assert.ok(missing !== null, 'a missing category_id must be refused');
+  assert.match(String(missing.message), /category_id/, String(missing.message));
+  await manager.initialize({ ...ALL, surface: 'compact' });
+});
+
+await check('NEGATIVE: getExperimentalFeatures() before initialize() fails closed naming initialize()', async () => {
+  const fresh = (await import('../../dist/src/actualToolsManager.js?fresh-experimental')).default;
+  assert.notStrictEqual(fresh, manager, 'the fresh import must be a distinct instance');
+  assert.throws(
+    () => fresh.getExperimentalFeatures(),
+    { message: 'Tool publication policy is not resolved: actualToolsManager.initialize() has not run' },
+  );
+});
+
 // ---- the default surface is byte-identical ----
 
 // Measured on origin/develop ebe14145 (the commit before this change), with the same entry

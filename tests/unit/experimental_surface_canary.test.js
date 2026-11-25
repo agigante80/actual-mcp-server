@@ -32,6 +32,9 @@ const bundle = (rows = CLEAN_ROWS, omit = null) => strings(omit) + currencyTable
 console.log('\n[#840] the pure core');
 check(checkBundle(bundle()).length === 0, 'a clean bundle gives no findings', JSON.stringify(checkBundle(bundle())));
 check(JSON.stringify(readCurrencyTable(bundle())) === JSON.stringify(CLEAN_ROWS.map(([code, decimalPlaces]) => ({ code, decimalPlaces }))), 'the currency table is read back as written');
+// An entry the pattern cannot read (decimalPlaces written before code) must make the table unreadable,
+// never a shorter table that passes: a silently dropped zero-decimal currency would hide a x100 error.
+check(readCurrencyTable(bundle().replace(/code: "JPY",([\s\S]*?)decimalPlaces: 0,/, 'decimalPlaces: 0,$1code: "JPY",')) === null, 'NEGATIVE: a reordered currency entry makes the table unreadable');
 
 {
   const f = checkBundle(bundle(CLEAN_ROWS, 'goal_def'));

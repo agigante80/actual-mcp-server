@@ -200,7 +200,7 @@ On the default compact surface the `chat` preset publishes 6 tools: `get_context
 
 With `MCP_TOOL_SURFACE=legacy` the `chat` preset publishes 16 tools: `actual_get_context`, `actual_query_run`, `actual_transactions_update_batch`, `actual_budget_updates_batch`, `actual_rules_create_batch`, `actual_transactions_create`, `actual_transactions_update`, `actual_transactions_delete`, `actual_rules_create`, `actual_budgets_transfer`, `actual_budgets_set_amount`, `actual_budgets_get_month`, `actual_budgets_get_months`, `actual_server_info`, `actual_server_get_version` and `actual_preferences_get`.
 
-`MCP_READ_ONLY=true` publishes 6 compact tools (`get_context`, `list_entities`, `search_transactions`, `summarize_transactions`, `list_budget_months` and `run_query`); every tool that can write is hidden whole. With `MCP_TOOL_SURFACE=legacy` it hides and refuses 48 write-capable tools and leaves 38 published.
+`MCP_READ_ONLY=true` publishes 6 compact tools (`get_context`, `list_entities`, `search_transactions`, `summarize_transactions`, `list_budget_months` and `run_query`); every tool that can write is hidden whole. With `MCP_TOOL_SURFACE=legacy` it hides and refuses 48 write-capable tools and leaves 37 published.
 <!-- END GENERATED: tools-summary -->
 
 How large the `tools/list` response is for each choice, so you can pick for a small tool budget:
