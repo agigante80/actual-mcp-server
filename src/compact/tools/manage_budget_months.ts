@@ -132,7 +132,7 @@ function describe(ctx: DescriptionContext): string {
     (a('set_amount') || a('set_amount_batch')) && 'amounts',
     a('set_carryover') && 'carryover',
     (a('hold') || a('reset_hold')) && 'the hold for next month',
-    a('transfer') && 'transfers between categories',
+    a('transfer') && 'transfers',
     a('set_note') && 'the month note',
     a('apply_templates') && 'templates',
     a('run_cleanup') && 'cleanup',
@@ -162,8 +162,8 @@ function describe(ctx: DescriptionContext): string {
     (a('reset_hold') ? 'reset_hold: month; releases the whole hold. ' : '') +
     (a('transfer') ? 'transfer: month, from_category_id, to_category_id (different, expense categories only), amount greater than 0 and at most 2251799813685247; the source needs that much budgeted; NOT atomic (the source may already be lowered). ' : '') +
     (a('set_note') ? 'set_note: month, note; sets or clears it. ' : '') +
-    (a('apply_templates') ? 'apply_templates (experimental): month, overwrite, category_id; applies #template notes; needs Goal templates on and an envelope budget. ' : '') +
-    (a('run_cleanup') ? 'run_cleanup (experimental): month; moves cleanup money to sinks, same needs. ' : '') +
+    (a('apply_templates') ? 'apply_templates (experimental): month, overwrite, category_id; applies #template notes; needs Goal templates on, an envelope budget. ' : '') +
+    (a('run_cleanup') ? 'run_cleanup (experimental): month; sweeps sources to sinks, covers ANY overspent category; same needs. ' : '') +
     `Returns ${returns.join(', ')}.`
   );
 }

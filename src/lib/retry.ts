@@ -1,6 +1,6 @@
 import { DEFAULT_RETRY_ATTEMPTS, DEFAULT_RETRY_BACKOFF_MS, MAX_RETRY_DELAY_MS } from './constants.js';
 import { ModuleLoggers } from './loggerFactory.js';
-import { errorLogFields } from './errors.js';
+import { errorLogFields, isPreflightRefusal, isUpstreamReportedError } from './errors.js';
 
 const log = ModuleLoggers.RETRY;
 
@@ -47,6 +47,11 @@ export const TRANSIENT_ERROR_PATTERNS: readonly string[] = [
  */
 export function isRetryableError(err: unknown): boolean {
   if (!(err instanceof Error)) return false;
+  // A typed refusal or an upstream-reported domain error is a decision about the REQUEST, never a
+  // transport failure, and its message can quote user content (a category name, a note line). It is
+  // excluded by TYPE before the message is matched, so text such as "timed out" inside a note cannot
+  // trigger a retry or a pool drop (#841; `_shouldDropPoolOnError` derives from this function).
+  if (isPreflightRefusal(err) || isUpstreamReportedError(err)) return false;
   const msg = err.message || '';
   return TRANSIENT_ERROR_PATTERNS.some(p => msg.includes(p));
 }

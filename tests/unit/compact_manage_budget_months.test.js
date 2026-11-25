@@ -185,7 +185,7 @@ await check('description: purpose, Returns, every action named, no legacy name',
   assert.ok(!/actual_/.test(spec.description));
 });
 await check('annotations and title', () => {
-  assert.deepStrictEqual(annotationsFor('manage_budget_months'), { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false });
+  assert.deepStrictEqual(annotationsFor('manage_budget_months'), { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false }); // #841: destructive since apply_templates and run_cleanup
   assert.strictEqual(titleFor('manage_budget_months'), 'Manage budget months');
 });
 await check('compactLegacyNames covers the targets, all write-capable', () => {

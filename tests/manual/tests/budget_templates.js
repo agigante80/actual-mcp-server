@@ -51,11 +51,11 @@ export async function budgetTemplatesTests(client, context) { // eslint-disable-
 
   const rangeOrFlag = /Goal templates are not enabled|outside this budget's range/;
   await expectRefusal('apply_templates [out-of-range month]',
-    () => callTool('manage_budget_months', { action: 'apply_templates', month: '2019-01' }), rangeOrFlag);
+    () => callTool('manage_budget_months', { action: 'apply_templates', month: '1899-01' }), rangeOrFlag);
   await expectRefusal('run_cleanup [out-of-range month]',
-    () => callTool('manage_budget_months', { action: 'run_cleanup', month: '2019-01' }), rangeOrFlag);
+    () => callTool('manage_budget_months', { action: 'run_cleanup', month: '1899-01' }), rangeOrFlag);
   await expectRefusal('run_cleanup [foreign field]',
-    () => callTool('manage_budget_months', { action: 'run_cleanup', month: '2019-01', category_id: ZERO_ID }), /category_id/);
+    () => callTool('manage_budget_months', { action: 'run_cleanup', month: '1899-01', category_id: ZERO_ID }), /category_id/);
   await expectRefusal('apply_templates [category without overwrite]',
-    () => callTool('manage_budget_months', { action: 'apply_templates', month: '2019-01', category_id: ZERO_ID }), /overwrite/);
+    () => callTool('manage_budget_months', { action: 'apply_templates', month: '1899-01', category_id: ZERO_ID }), /overwrite/);
 }

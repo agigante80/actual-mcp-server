@@ -107,6 +107,16 @@ for (const m of ['ECONNRESET', 'socket hang up', 'Authentication failed: invalid
   check(`non-rate-limit transient still drops: "${m}"`, droppable === isRetryableError(e));
 }
 
+console.log('\n[retry-classifier] #841: a typed refusal or upstream-reported error is never retryable, whatever its text');
+{
+  const { OutOfRangeRefusal, NotFoundRefusal, UpstreamReportedError } = await import('../../dist/src/lib/errors.js');
+  for (const p of TRANSIENT_ERROR_PATTERNS) {
+    check(`refusal quoting "${p}" is NOT retryable`, isRetryableError(new OutOfRangeRefusal(`note says ${p}`, '2026-11')) === false);
+    check(`upstream-reported error quoting "${p}" is NOT retryable`, isRetryableError(new UpstreamReportedError(`Upstream said: ${p}`)) === false);
+  }
+  check('not-found refusal is NOT retryable', isRetryableError(new NotFoundRefusal('Category', 'timed out', 'actual_categories_get')) === false);
+}
+
 console.log('\n[retry-classifier] single source of truth: pool-drop derives from the classifier (#177 + #422 carve-out)');
 const here = dirname(fileURLToPath(import.meta.url));
 const adapterSrc = readFileSync(resolve(here, '../../src/lib/actual-adapter.ts'), 'utf8');

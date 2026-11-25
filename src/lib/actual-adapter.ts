@@ -85,7 +85,7 @@ import {
   assertMonthInRange, diffMonthRows, isFlagOn, matchingCheckEntries, monthCategoryRows, readReply, readUntilSettled, templateCheckMessage,
   type BudgetChange,
 } from './actual-adapter/budget-templates.js';
-import { ConflictRefusal, FeatureDisabledRefusal, LockedRefusal, NotFoundRefusal, OutOfRangeRefusal, constraintErrorMsg, errorLogFields, isPreflightRefusal } from './errors.js';
+import { ConflictRefusal, FeatureDisabledRefusal, LockedRefusal, NotFoundRefusal, OutOfRangeRefusal, UpstreamReportedError, constraintErrorMsg, errorLogFields, isPreflightRefusal } from './errors.js';
 
 // #800: every raw WRITE binding refuses to run once its operation was abandoned after the write
 // timeout (see opTimeout.ts). One chokepoint at the binding, so no tool or adapter call site
@@ -6484,18 +6484,20 @@ async function runTemplateWrite(
 
   // 4. The category, for a single-category apply.
   let categoryName: string | undefined;
+  let otherCategoryNames: string[] = [];
   if (opts.categoryId !== undefined) {
     const categories = await read(() => readDrainListing('categories', () => rawGetCategories() as Promise<Array<{ id: string; name?: string }>>));
     const found = (categories as Array<{ id: string; name?: string }>).find((c) => c.id === opts.categoryId);
     if (!found) throw new NotFoundRefusal('Category', opts.categoryId, 'actual_categories_get');
     categoryName = found.name ?? opts.categoryId;
+    otherCategoryNames = (categories as Array<{ id: string; name?: string }>).filter((c) => c.id !== opts.categoryId && typeof c.name === 'string').map((c) => c.name as string);
   }
 
   // 5. The template check, for an apply: bad notes make a half-applied month.
   if (kind === 'apply') {
     const check = readReply(await internalSend('budget/check-templates'));
     if (check.message === 'template-errors') {
-      const entries = matchingCheckEntries(check.pre, categoryName);
+      const entries = matchingCheckEntries(check.pre, categoryName, otherCategoryNames);
       if (entries.length > 0) throw new OutOfRangeRefusal(templateCheckMessage(entries), month);
     }
   }
@@ -6509,7 +6511,7 @@ async function runTemplateWrite(
         : await internalSend(opts.overwrite ? 'budget/overwrite-goal-template' : 'budget/apply-goal-template', { month }),
     );
     if (reply.message === 'template-errors') {
-      throw new Error(`Actual reported template errors after the apply started; stored templates may already have been rewritten. Upstream said: ${reply.pre ?? '(no detail)'}`);
+      throw new UpstreamReportedError(`Actual reported template errors after the apply started; stored templates may already have been rewritten. Upstream said: ${reply.pre ?? '(no detail)'}`);
     }
     if (!reply.message || !KNOWN_APPLY_REPLIES.has(reply.message)) {
       logger.warn('[ADAPTER] unrecognised reply to a template apply; reporting what a re-read shows', { reply: reply.message ?? null });
@@ -6517,7 +6519,7 @@ async function runTemplateWrite(
   } else {
     const reply = readReply(await internalSend('budget/cleanup-goal-template', { month }));
     if (reply.message === 'template-errors') {
-      throw new Error(`Actual reported template errors during the cleanup; some money may already have moved. Upstream said: ${reply.pre ?? '(no detail)'}`);
+      throw new UpstreamReportedError(`Actual reported template errors during the cleanup; some money may already have moved. Upstream said: ${reply.pre ?? '(no detail)'}`);
     }
     if (reply.message === 'cleanup-applied-with-errors' || reply.message === 'cleanup-no-funds') {
       notice = reply.pre ?? reply.message;

@@ -13,7 +13,10 @@
 import { readFileSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import * as api from '@actual-app/api';
+// The DEFAULT import, on purpose: the package is CommonJS and `internal` is assigned by init(). A
+// namespace import (`import * as api`) copies the named exports when the module loads, so its
+// `internal` stays null for ever and the send below throws on null (first real run of #841).
+import api from '@actual-app/api';
 
 const FLAG = 'flags.goalTemplatesEnabled';
 const serverURL = process.env.ACTUAL_SERVER_URL;
@@ -30,9 +33,11 @@ let code = 0;
 try {
   const syncId = readFileSync(syncIdFile, 'utf8').trim();
   if (!syncId) throw new Error(`no sync id in ${syncIdFile}`);
-  await api.init({ dataDir, serverURL, password });
+  // init() returns the internal handle; take it from there rather than from a module property.
+  const internal = await api.init({ dataDir, serverURL, password });
+  if (!internal || typeof internal.send !== 'function') throw new Error('api.init() returned no internal handle');
   await api.downloadBudget(syncId);
-  await api.internal.send('preferences/save', { id: FLAG, value: 'true' });
+  await internal.send('preferences/save', { id: FLAG, value: 'true' });
   // Read it back from the budget itself, then push the change to the server.
   const { data } = await api.runQuery(api.q('preferences').filter({ id: FLAG }).select('*'));
   if (!data || data.length !== 1 || data[0].value !== 'true') {
