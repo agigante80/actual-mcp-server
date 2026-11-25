@@ -85,6 +85,18 @@ await check('#680: deriveCompact lists a compact tool for chat when any operatio
   assert.deepStrictEqual(c.readOnly, ['c2', 'c3']);
 });
 
+await check('#840: a tool gated by MCP_EXPERIMENTAL is not counted among the tools read-only leaves published', () => {
+  const inputs = stubInputs();
+  const left = (text) => Number(/leaves (\d+) published/.exec(text)[1]);
+  const base = left(tools.renderToolsSummary(inputs));
+  const readTool = Object.values(inputs.toolsets).flat().find((n) => !inputs.writeCapable.has(n));
+  const writeTool = [...inputs.writeCapable][0];
+  assert.strictEqual(left(tools.renderToolsSummary({ ...inputs, experimental: [readTool] })), base - 1);
+  // A gated tool that also writes is already hidden by read-only: it is subtracted once, not twice.
+  assert.strictEqual(left(tools.renderToolsSummary({ ...inputs, experimental: [writeTool] })), base);
+  assert.strictEqual(left(tools.renderToolsSummary({ ...inputs, compact: { chat: ['c1'], readOnly: ['c2'] }, experimental: [readTool] })), base - 1);
+});
+
 await check('#680: a compact input renders the compact sentences and keeps the legacy ones; without it only legacy', () => {
   const withCompact = tools.renderToolsSummary({ ...stubInputs(), compact: { chat: ['c1'], readOnly: ['c2', 'c3'] } });
   assert.ok(withCompact.includes('| Toolset | Operations | Contents |'), withCompact);
@@ -196,11 +208,14 @@ await check('real registry: the rendered block equals the README block and carri
   });
   const block = tools.renderToolsSummary({
     toolsets: real.TOOLSETS, chat: real.PRESETS.chat, writeCapable: real.WRITE_CAPABLE, scopes: tools.TOOLSET_SCOPES, compact,
+    experimental: Object.values(real.EXPERIMENTAL).flat(),
   });
   const readme = readFileSync(join(ROOT, 'README.md'), 'utf8');
   assert.strictEqual(tools.replaceBlock(readme, block), readme, 'README block is stale');
   const sum = Object.values(real.TOOLSETS).reduce((n, a) => n + a.length, 0);
-  assert.ok(block.includes(`leaves ${sum - real.WRITE_CAPABLE.size} published`));
+  // #840: a default server does not publish a gated tool, so it is not among the ones left.
+  const hidden = new Set([...real.WRITE_CAPABLE, ...Object.values(real.EXPERIMENTAL).flat()]).size;
+  assert.ok(block.includes(`leaves ${sum - hidden} published`));
   const { TOTAL_PATTERNS } = await import('../../scripts/tool-count.mjs');
   for (const { re, label } of TOTAL_PATTERNS) {
     assert.strictEqual(new RegExp(re.source, re.flags).test(block), false, `block matches total pattern: ${label}`);

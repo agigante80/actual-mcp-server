@@ -52,6 +52,9 @@ export function readCurrencyTable(text) {
   const entry = /code:\s*"([^"]*)"[\s\S]*?decimalPlaces:\s*(\d+)/g;
   let m;
   while ((m = entry.exec(body)) !== null) out.push({ code: m[1], decimalPlaces: Number(m[2]) });
+  // The pattern needs `code` before `decimalPlaces`. If the bundle ever orders an entry the other way
+  // the pattern skips it, so an entry count that disagrees means the table is unreadable, not clean.
+  if (out.length !== (body.match(/\bcode:\s*"/g) ?? []).length) return null;
   return out;
 }
 

@@ -248,7 +248,8 @@ COMPACT_TOOL_COUNT=$(grep -m1 '^export const COMPACT_TOOLS' "$DEV_DIR/src/compac
 # #840: a tool gated by MCP_EXPERIMENTAL is registered but published only when its feature is named.
 # Each feature gates exactly one tool today (src/lib/toolsets.ts EXPERIMENTAL); subtract the tools of
 # the features the server does NOT name. Counting the unpublished tool would fail a correct server.
-EXPERIMENTAL_ENV="$(container_env MCP_EXPERIMENTAL)"
+# The server trims each name, so spaces around a comma must not change the count here.
+EXPERIMENTAL_ENV="$(container_env MCP_EXPERIMENTAL | tr -d ' ')"
 case ",$EXPERIMENTAL_ENV," in
   *,budget_automations,*) ;;
   *) LEGACY_TOOL_COUNT=$((LEGACY_TOOL_COUNT - 1)) ;;

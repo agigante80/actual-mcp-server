@@ -69,7 +69,7 @@ function joinNames(names) {
 }
 
 /** Pure. Returns the block text including both markers. Throws on a scope mismatch. */
-export function renderToolsSummary({ toolsets, chat, writeCapable, scopes, compact }) {
+export function renderToolsSummary({ toolsets, chat, writeCapable, scopes, compact, experimental = [] }) {
   const keys = Object.keys(toolsets);
   for (const key of keys) {
     if (!(key in scopes)) throw new Error(`TOOLSET_SCOPES has no entry for toolset ${key}`);
@@ -78,6 +78,9 @@ export function renderToolsSummary({ toolsets, chat, writeCapable, scopes, compa
     if (!(key in toolsets)) throw new Error(`TOOLSET_SCOPES names unknown toolset ${key}`);
   }
   const total = keys.reduce((n, k) => n + toolsets[k].length, 0);
+  // #840: a tool gated by MCP_EXPERIMENTAL is not published by default, so the read-only sentence
+  // (which describes a default server) must not count it among the tools left published.
+  const leftPublished = total - new Set([...writeCapable, ...experimental]).size;
   const rows = keys.map((k) => `| \`${k}\` | ${toolsets[k].length} | ${scopes[k]} |`);
   return [
     BEGIN,
@@ -92,12 +95,12 @@ export function renderToolsSummary({ toolsets, chat, writeCapable, scopes, compa
         '',
         `With \`MCP_TOOL_SURFACE=legacy\` the \`chat\` preset publishes ${chat.length} tools: ${joinNames(chat)}.`,
         '',
-        `\`MCP_READ_ONLY=true\` publishes ${compact.readOnly.length} compact tools (${joinNames(compact.readOnly)}); every tool that can write is hidden whole. With \`MCP_TOOL_SURFACE=legacy\` it hides and refuses ${writeCapable.size} write-capable tools and leaves ${total - writeCapable.size} published.`,
+        `\`MCP_READ_ONLY=true\` publishes ${compact.readOnly.length} compact tools (${joinNames(compact.readOnly)}); every tool that can write is hidden whole. With \`MCP_TOOL_SURFACE=legacy\` it hides and refuses ${writeCapable.size} write-capable tools and leaves ${leftPublished} published.`,
       ]
       : [
         `The \`chat\` preset publishes ${chat.length} tools: ${joinNames(chat)}.`,
         '',
-        `\`MCP_READ_ONLY=true\` hides and refuses ${writeCapable.size} write-capable tools and leaves ${total - writeCapable.size} published.`,
+        `\`MCP_READ_ONLY=true\` hides and refuses ${writeCapable.size} write-capable tools and leaves ${leftPublished} published.`,
       ]),
     END,
   ].join('\n');
@@ -152,7 +155,7 @@ async function loadRegistry(root) {
   const file = join(root, DIST_REL);
   if (!existsSync(file)) return null;
   const mod = await import(pathToFileURL(file).href);
-  const base = { toolsets: mod.TOOLSETS, chat: mod.PRESETS.chat, writeCapable: mod.WRITE_CAPABLE };
+  const base = { toolsets: mod.TOOLSETS, chat: mod.PRESETS.chat, writeCapable: mod.WRITE_CAPABLE, experimental: Object.values(mod.EXPERIMENTAL ?? {}).flat() };
   const registryFile = join(root, COMPACT_REGISTRY_REL);
   const dispatchFile = join(root, COMPACT_DISPATCH_REL);
   if (!existsSync(registryFile) || !existsSync(dispatchFile)) return base;
