@@ -73,11 +73,19 @@ export function splitCheckEntries(pre: string | undefined): string[] {
 /**
  * The entries that should refuse. Month-wide apply: every entry. Single-category apply: only those
  * that start with `<category name>: ` (a same-named category is included, which is accepted).
+ *
+ * `otherNames` are the budget's other category names. An entry that a LONGER name also claims is
+ * dropped: a category "Bills: Utilities" with a broken note produces `Bills: Utilities: <error>`,
+ * which also starts with `Bills: `, and must not refuse an apply on a healthy "Bills". If the
+ * dropped entry was this category's after all (its error text happens to start with the other
+ * name), upstream still reports it in the write's own reply, so nothing is applied silently.
  */
-export function matchingCheckEntries(pre: string | undefined, categoryName?: string): string[] {
+export function matchingCheckEntries(pre: string | undefined, categoryName?: string, otherNames: readonly string[] = []): string[] {
   const entries = splitCheckEntries(pre);
   if (categoryName === undefined) return entries;
-  return entries.filter((entry) => entry.startsWith(`${categoryName}: `));
+  const prefix = `${categoryName}: `;
+  const longer = otherNames.filter((n) => n.length > categoryName.length && n.startsWith(prefix));
+  return entries.filter((entry) => entry.startsWith(prefix) && !longer.some((n) => entry.startsWith(`${n}: `)));
 }
 
 export function templateCheckMessage(entries: readonly string[]): string {

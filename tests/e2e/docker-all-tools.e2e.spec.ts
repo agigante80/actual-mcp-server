@@ -5164,8 +5164,8 @@ test.describe('Docker E2E - compact manage_categories (#676)', () => {
   test('manage_budget_months apply_templates and run_cleanup - ERROR: out-of-range month, category without overwrite, foreign field and unknown category are refused (#841)', async ({ mcp }) => {
     await expectTemplateActions(mcp);
     const zero = '00000000-0000-4000-8000-000000000000';
-    expect(await refusal(() => mcp.call('manage_budget_months', { action: 'apply_templates', month: '2019-01' }))).toMatch(/outside this budget's range/);
-    expect(await refusal(() => mcp.call('manage_budget_months', { action: 'run_cleanup', month: '2019-01' }))).toMatch(/outside this budget's range/);
+    expect(await refusal(() => mcp.call('manage_budget_months', { action: 'apply_templates', month: '1899-01' }))).toMatch(/outside this budget's range/);
+    expect(await refusal(() => mcp.call('manage_budget_months', { action: 'run_cleanup', month: '1899-01' }))).toMatch(/outside this budget's range/);
     expect(await refusal(() => mcp.call('manage_budget_months', { action: 'apply_templates', month: currentMonth(), category_id: zero }))).toMatch(/overwrite: true/);
     expect(await refusal(() => mcp.call('manage_budget_months', { action: 'apply_templates', month: currentMonth(), category_id: zero, overwrite: true }))).toMatch(/not found/i);
     expect(await refusal(() => mcp.call('manage_budget_months', { action: 'run_cleanup', month: currentMonth(), category_id: zero }))).toMatch(/category_id/);
@@ -5174,11 +5174,22 @@ test.describe('Docker E2E - compact manage_categories (#676)', () => {
 
   test('manage_budget_months run_cleanup - runs on the test budget and reports the verified re-read (#841)', async ({ mcp }) => {
     await expectTemplateActions(mcp);
-    // The fixture budget carries no #cleanup directives, so this moves nothing; the assertion is the result shape.
+    // The fixture budget carries no #cleanup directives, but upstream cleanup also covers any overspent
+    // category that does not roll over, and other rows may have left one. So the row cannot pin
+    // `changes` to []: it pins that the re-read settled and that every reported change is a real one.
     const res = await mcp.call('manage_budget_months', { action: 'run_cleanup', month: currentMonth() });
     expect(res?.month).toBe(currentMonth());
-    expect(typeof res?.verified).toBe('boolean');
+    expect(res?.verified).toBe(true);
     expect(Array.isArray(res?.changes)).toBe(true);
+    for (const change of res.changes as any[]) {
+      expect(typeof change?.categoryId).toBe('string');
+      expect(Number.isInteger(change?.before) && Number.isInteger(change?.after)).toBe(true);
+      expect(change.after).not.toBe(change.before);
+    }
+    // A second run right after has nothing left to move.
+    const again = await mcp.call('manage_budget_months', { action: 'run_cleanup', month: currentMonth() });
+    expect(again?.verified).toBe(true);
+    expect(again?.changes).toEqual([]);
   });
 
   test('manage_categories - ERROR: missing entity, missing group_id, hidden on a category and an empty update', async ({ mcp }) => {
@@ -6742,11 +6753,11 @@ test.describe('legacy smoke (MCP_TOOL_SURFACE=all)', () => {
     const applied = await mcp.call('actual_budgets_apply_templates', { month: currentMonth(), categoryId: category.id, overwrite: true });
     expect(applied?.verified).toBe(true);
     expect(applied?.changes).toEqual([{ categoryId: category.id, name: category.name, before: 0, after: 5000 }]);
-    expect(await refusal(() => mcp.call('actual_budgets_apply_templates', { month: '2019-01' }))).toMatch(/outside this budget's range/);
+    expect(await refusal(() => mcp.call('actual_budgets_apply_templates', { month: '1899-01' }))).toMatch(/outside this budget's range/);
     expect(await refusal(() => mcp.call('actual_budgets_apply_templates', { month: currentMonth(), categoryId: category.id }))).toMatch(/overwrite/);
     const cleaned = await mcp.call('actual_budgets_run_cleanup', { month: currentMonth() });
     expect(typeof cleaned?.verified).toBe('boolean');
-    expect(await refusal(() => mcp.call('actual_budgets_run_cleanup', { month: '2019-01' }))).toMatch(/outside this budget's range/);
+    expect(await refusal(() => mcp.call('actual_budgets_run_cleanup', { month: '1899-01' }))).toMatch(/outside this budget's range/);
   });
 
   test('actual_entities_search - finds a seeded payee and returns nothing for a nonsense query', async ({ mcp, makePayee }) => {

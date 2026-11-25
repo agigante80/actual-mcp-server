@@ -1,11 +1,11 @@
 {
   "compact": {
-    "bytes": 44460,
+    "bytes": 44440,
     "label": "Compact surface (default)",
     "tools": 15
   },
   "compact-chat": {
-    "bytes": 14419,
+    "bytes": 14399,
     "label": "Compact, `MCP_TOOLSETS=chat`",
     "tools": 6
   },

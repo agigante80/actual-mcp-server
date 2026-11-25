@@ -32,6 +32,7 @@ Also see:
 - `tests/shared/e2e-helpers.ts` — shared HTTP/MCP helpers (`waitForMCPHealth`, `retryRequest`,
   `callTool`, `extractResult`) imported by all spec files. Canonical source for `extractResult`.
 - `tests/shared/mcp-protocol.js` — JS mirror of `extractResult` for plain-JS manual test suites.
+- `tests/e2e/enable-goal-templates.mjs`: run by both bootstrap containers in `compose.yaml` after the budget is created (#841). It turns the Goal templates setting on in the test budget (the synced preference `flags.goalTemplatesEnabled`) and syncs, so the `apply_templates` and `run_cleanup` rows run against a budget that has the feature on. It imports the DEFAULT export of `@actual-app/api`: a namespace import leaves `internal` null.
 
 ---
 

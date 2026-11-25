@@ -10,7 +10,7 @@ import adapter from '../lib/actual-adapter.js';
 export default createTool({
   name: 'actual_budgets_run_cleanup',
   description:
-    'Experimental (MCP_EXPERIMENTAL=budget_automations; may break on an Actual upgrade). WRITES budgeted amounts: runs end of month cleanup for one month, moving money from the source categories to the sink categories set in the cleanup automations. ' +
+    'Experimental (MCP_EXPERIMENTAL=budget_automations; may break on an Actual upgrade). WRITES budgeted amounts: runs end of month cleanup for one month, moving money from the source categories to the sink categories set in the cleanup automations. It ALSO covers every overspent expense category that does not roll over from To Budget, whether or not it has a cleanup directive. ' +
     'Needs Settings > Experimental features > Goal templates on in this budget; if it is off the call is refused and nothing changes. Needs an envelope budget. ' +
     'Money of a group source that has no sink goes to the global sink. A second run finds nothing left to move. ' +
     'Returns { month, verified, changes: [{ categoryId, name, before, after }] } from re-reading the month; changes is empty when nothing moved. ' +

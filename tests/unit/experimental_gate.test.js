@@ -253,7 +253,10 @@ await check('NEGATIVE: getExperimentalFeatures() before initialize() fails close
 // #841 re-measured compact and all: manage_budget_months carries nine actions with the feature on
 // and the entry must stay under the 3,900 byte per-tool ceiling, so its older text was trimmed
 // (compact 44852 to 44460, all 171909 to 171517). The legacy list is unchanged.
-const DEFAULT_BYTES = { legacy: 127058, compact: 44460, all: 171517 };
+// Review of PR 844: the noun "transfers between categories" became "transfers" to pay for the
+// cleanup sentence that is only published with the feature on (compact 44460 to 44440, all 171517
+// to 171497).
+const DEFAULT_BYTES = { legacy: 127058, compact: 44440, all: 171497 };
 const DEFAULT_COUNT = { legacy: 85, compact: 15, all: 100 };
 const LIST_ENTITIES_DEFAULT_BYTES = 3900;
 

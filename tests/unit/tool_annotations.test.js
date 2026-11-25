@@ -176,6 +176,22 @@ check('every compact tool is annotated read-only, idempotent and closed-world ex
   }
 });
 
+check('#841: a compact tool is destructive when ANY legacy tool it maps to is', () => {
+  // Derived from the routes, not listed: manage_budget_months stayed ADDITIVE after it gained two
+  // destructive targets (found by the security review of PR 844), so a client that auto-approves
+  // non-destructive tools would have run a template apply or a cleanup without asking.
+  let derived = 0;
+  for (const t of COMPACT_TOOLS) {
+    const destructiveTargets = compactLegacyNames(t).filter((n) => annotationsFor(n).destructiveHint === true);
+    if (destructiveTargets.length > 0) {
+      derived++;
+      assert.strictEqual(annotationsFor(t.name).destructiveHint, true, `${t.name} maps to destructive [${destructiveTargets.join(', ')}] but is not marked destructive`);
+    }
+  }
+  assert.ok(derived >= 8, `the derivation found only ${derived} compact tools with a destructive target`);
+  assert.strictEqual(annotationsFor('manage_budget_months').destructiveHint, true);
+});
+
 check('manage_accounts is open-world (bank_sync) and the other compact writers are not (#676)', () => {
   assert.strictEqual(annotationsFor('manage_accounts').openWorldHint, true);
   for (const n of ['manage_categories', 'manage_payees', 'manage_rules', 'manage_schedules', 'manage_tags', 'manage_transactions', 'manage_budget_months', 'manage_budget_files']) assert.strictEqual(annotationsFor(n).openWorldHint, false, n);

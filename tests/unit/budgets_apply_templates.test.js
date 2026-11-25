@@ -42,9 +42,11 @@ let tracking = false;
 let budgeted = {};                           // id -> cents
 let monthReads = 0;
 let drift = false;                           // when true every read of the month differs (never settles)
-const names = { [RENT]: 'Rent', [FOOD]: 'Food', [FUN]: 'Fun' };
+const RENT_INS = '70000000-0000-4000-8000-000000000004';
+let names = { [RENT]: 'Rent', [FOOD]: 'Food', [FUN]: 'Fun' };
 const reset = () => {
   flagRow = 'true'; months = ['2026-10', '2026-11', '2026-12']; tracking = false; drift = false; monthReads = 0;
+  names = { [RENT]: 'Rent', [FOOD]: 'Food', [FUN]: 'Fun' };
   budgeted = { [RENT]: 0, [FOOD]: 0, [FUN]: 500 };
   sent.length = 0; queries.length = 0; replies = defaultReplies();
 };
@@ -212,6 +214,36 @@ reset();
   same(sentNames(), ['budget/check-templates'], 'the apply was never sent');
 }
 
+console.log('\n[#841] a sibling whose NAME starts with "<name>: " does not refuse a healthy category (review of PR 844)');
+reset();
+{
+  names = { ...names, [RENT_INS]: 'Rent: Insurance' };
+  budgeted[RENT_INS] = 0;
+  replies['budget/check-templates'] = { message: 'template-errors', pre: 'Rent: Insurance: bad directive' };
+  const { value, error } = await attempt(adapter.applyBudgetTemplates('2026-11', { categoryId: RENT, overwrite: true }));
+  check(error === undefined, 'the apply on "Rent" is not refused by the broken note of "Rent: Insurance"', error?.message);
+  same(sentNames(), ['budget/check-templates', 'budget/apply-single-template'], 'the single apply was sent');
+  check(value?.changes?.some((c) => c.categoryId === RENT), 'and it changed Rent');
+}
+reset();
+{
+  names = { ...names, [RENT_INS]: 'Rent: Insurance' };
+  budgeted[RENT_INS] = 0;
+  replies['budget/check-templates'] = { message: 'template-errors', pre: 'Rent: Insurance: bad directive' };
+  const { error } = await attempt(adapter.applyBudgetTemplates('2026-11', { categoryId: RENT_INS, overwrite: true }));
+  check(error instanceof OutOfRangeRefusal, 'NEGATIVE: the apply on "Rent: Insurance" itself IS refused');
+  check(error?.message === 'Template check failed, nothing was changed. Fix these category notes in Actual, then retry:\nRent: Insurance: bad directive', 'exact message', error?.message);
+  same(sentNames(), ['budget/check-templates'], 'the apply was never sent');
+}
+reset();
+{
+  names = { ...names, [RENT_INS]: 'Rent: Insurance' };
+  budgeted[RENT_INS] = 0;
+  replies['budget/check-templates'] = { message: 'template-errors', pre: 'Rent: bad directive\n\nRent: Insurance: other' };
+  const { error } = await attempt(adapter.applyBudgetTemplates('2026-11', { categoryId: RENT, overwrite: true }));
+  check(error?.message === 'Template check failed, nothing was changed. Fix these category notes in Actual, then retry:\nRent: bad directive', 'NEGATIVE: the entry of "Rent" itself still refuses, and only it is listed', error?.message);
+}
+
 // ---------------------------------------------------------------------------
 console.log('\n[#841] a template error AFTER the apply started is a plain error, not a refusal');
 reset();
@@ -221,6 +253,25 @@ reset();
   check(error instanceof Error && !isPreflightRefusal(error), 'a plain Error: the state may have changed, so it is not a "nothing changed" refusal');
   check(error?.message === 'Actual reported template errors after the apply started; stored templates may already have been rewritten. Upstream said: Rent: broke mid way', 'exact message', error?.message);
   check(sentNames().filter((n) => n === 'budget/apply-goal-template').length === 1, 'the apply was sent once, never retried');
+  check(errors.isUpstreamReportedError(error), 'typed as upstream-reported, so no classifier reads its text');
+}
+
+console.log('\n[#841] upstream text that LOOKS like a network failure is not classified as one (security review of PR 844)');
+{
+  const { isRetryableError, TRANSIENT_ERROR_PATTERNS } = await import('../../dist/src/lib/retry.js');
+  for (const pattern of TRANSIENT_ERROR_PATTERNS) {
+    const noteLine = `Rent: #template ${pattern} 100`;
+    check(isRetryableError(new Error(noteLine)) === true, `control: a plain Error with "${pattern}" IS retryable`);
+    reset();
+    replies['budget/apply-goal-template'] = { message: 'template-errors', pre: noteLine };
+    const after = await attempt(adapter.applyBudgetTemplates('2026-11'));
+    check(after.error?.message.includes(pattern) && isRetryableError(after.error) === false, `post-send error quoting "${pattern}" is not retryable (no pool drop)`);
+    check(sentNames().filter((n) => n === 'budget/apply-goal-template').length === 1, `sent once with "${pattern}"`);
+    reset();
+    replies['budget/check-templates'] = { message: 'template-errors', pre: noteLine };
+    const before = await attempt(adapter.applyBudgetTemplates('2026-11'));
+    check(before.error instanceof OutOfRangeRefusal && before.error.message.includes(pattern) && isRetryableError(before.error) === false, `check refusal quoting "${pattern}" is not retryable`);
+  }
 }
 
 console.log('\n[#841] a send that fails is not retried and the cause survives');

@@ -139,6 +139,7 @@ reset();
   const { error } = await attempt(adapter.runBudgetCleanup('2026-11'));
   check(error instanceof Error && !isPreflightRefusal(error), 'a plain Error, not a refusal');
   check(error?.message === 'Actual reported template errors during the cleanup; some money may already have moved. Upstream said: Rent: bad cleanup directive', 'exact message', error?.message);
+  check(error?.upstreamReported === true, 'typed as upstream-reported, so the pool-drop classifier never reads its text');
 }
 
 console.log('\n[#841] a failing send is sent once and surfaces its cause');

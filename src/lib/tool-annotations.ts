@@ -127,8 +127,13 @@ const DESTRUCTIVE = new Set<string>([
   'manage_tags',
   'manage_rules',
   'manage_schedules',
-  // Compact tools (#678): manage_budget_files exports (overwrites a same-named file) and imports (#687: adds a server budget file no tool here removes, so irreversible; it replaces nothing); manage_budget_months only sets fields in place, so it is ADDITIVE.
+  // Compact tools (#678): manage_budget_files exports (overwrites a same-named file) and imports (#687: adds a server budget file no tool here removes, so irreversible; it replaces nothing); manage_budget_months was ADDITIVE until #841.
   'manage_budget_files',
+  // #841: its apply_templates and run_cleanup actions map to the two destructive legacy tools below, so the tool is destructive
+  // as a whole (the same rule as manage_transactions). The annotation is static: it stays true on a server that leaves the
+  // experimental feature off, which is the conservative direction for a hint. tool_annotations.test.js derives this rule
+  // from the compact routes, so a compact tool that gains a destructive target fails the build until it is listed here.
+  'manage_budget_months',
   'actual_account_groups_delete',
   'actual_accounts_close',
   'actual_accounts_delete',
@@ -221,7 +226,6 @@ const ADDITIVE = new Set<string>([
   'actual_tags_create',
   'actual_tags_update',
   'actual_notes_update',
-  'manage_budget_months',
 ]);
 
 /**

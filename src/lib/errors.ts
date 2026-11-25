@@ -131,6 +131,26 @@ export class FeatureDisabledRefusal extends PreflightRefusal {
 }
 
 /**
+ * Upstream finished a request and REPORTED a domain problem in its reply (#841: `template-errors`
+ * after a template write started). The message carries upstream's own text, which is built from
+ * user content (category names, note lines), so it must never be read by a message-matching
+ * classifier: a note line containing "timed out" would otherwise look like a network failure and
+ * tear the session's connection down. `isRetryableError` returns false for this class.
+ */
+export class UpstreamReportedError extends Error {
+  readonly upstreamReported = true as const;
+  constructor(message: string) {
+    super(message);
+    this.name = 'UpstreamReportedError';
+  }
+}
+
+export function isUpstreamReportedError(error: unknown): error is UpstreamReportedError {
+  if (error instanceof UpstreamReportedError) return true;
+  return typeof error === 'object' && error !== null && (error as { upstreamReported?: unknown }).upstreamReported === true;
+}
+
+/**
  * The check a tool uses to decide "structured refusal" versus "rethrow". Prefer this over
  * a bare `instanceof` so the brand fallback above applies.
  */
