@@ -133,6 +133,8 @@ merely proposed. Where it says OPEN, the ticket exists and the behaviour is stil
 | Tool | What makes it safe |
 |---|---|
 | `actual_accounts_delete` | verify-after in the tool (#347) |
+| `actual_budgets_apply_templates` | #841: the adapter checks the flag, month, budget type, category and the template notes before one non-retried internal send, then re-reads the month and returns the diff with `verified`; a handler that does nothing shows as an empty `changes`, not as success |
+| `actual_budgets_run_cleanup` | #841: same guards and the same re-read diff after one non-retried internal send; `cleanup-no-funds` and `cleanup-applied-with-errors` come back as a `notice` |
 | `actual_budgets_import` | fixed in #349 |
 | `actual_transactions_delete` | adapter pre-flight by id with `splits: 'all'` (#212/#305); upstream also returns `[]` |
 | `actual_transactions_merge` | adapter pre-flight of both ids with `splits: 'all'` (#514): not found, split child, different accounts and different amounts are typed refusals before the write; upstream `mergeTransactions` also throws before any write on the same cases |

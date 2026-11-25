@@ -24,7 +24,7 @@ tests/e2e/
 ├── tsconfig.json                      ← typecheck project for this dir (npm run typecheck:e2e)
 ├── compact-surface.e2e.spec.ts        ← the compact leg (#681): the 15-tool surface over stdio,
 │                                         project docker-e2e-compact-stdio, Step 6c
-└── docker-all-tools.e2e.spec.ts      ← Comprehensive coverage of all 86 tools; the ONLY
+└── docker-all-tools.e2e.spec.ts      ← Comprehensive coverage of all 88 tools; the ONLY
                                         file that carries E2E assertions (see the #366 note)
 ```
 
@@ -78,7 +78,7 @@ logs before tearing the stack down.
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `MCP_SERVER_URL` | `http://mcp-server-test:3600` | MCP server URL |
-| `EXPECTED_TOOL_COUNT` | `86` | Expected tool count (must match `actualToolsManager.ts`) |
+| `EXPECTED_TOOL_COUNT` | `88` | Expected tool count (must match `actualToolsManager.ts`) |
 | `USE_DOCKER_MCP_SERVER` | `true` | Set to `false` to spawn a local server (mcp-client spec only) |
 | `MCP_E2E_TOOL_SURFACE` | unset | Read by `stdio-client.ts` (#681): when set (the compact leg sets `compact`), it passes `-e MCP_TOOL_SURFACE=<value>` to the `docker exec` that starts the stdio server, so the spec sees that surface. Unset leaves the server default |
 
@@ -152,7 +152,7 @@ streaming, and session lifecycle.
 
 ### `compact-surface.e2e.spec.ts` (#681)
 
-**Purpose:** the default compact surface end to end: 15 tools over 86 operations.
+**Purpose:** the default compact surface end to end: 15 tools over 88 operations.
 
 - Runs as project `docker-e2e-compact-stdio` in Step 6c of `run-docker-e2e.sh`, over stdio from the host
 - `MCP_E2E_TOOL_SURFACE=compact` makes `stdio-client.ts` start the server with `MCP_TOOL_SURFACE=compact`
@@ -161,7 +161,7 @@ streaming, and session lifecycle.
 
 ### `docker-all-tools.e2e.spec.ts`
 
-**Purpose:** Comprehensive named tests for all 86 tools: success paths plus error and negative paths.
+**Purpose:** Comprehensive named tests for all 88 tools: success paths plus error and negative paths.
 
 - Every test is **self-provisioning** (#375): it asks `fixtures.ts` for what it needs, and
   everything it creates is removed in fixture teardown, which runs even when the test fails

@@ -43,7 +43,7 @@
 tests/
 ├── unit/                    # Unit tests (fast, isolated, offline)
 │   ├── transactions_create.test.js        # Zod schema validation (transactions_create)
-│   ├── generated_tools.smoke.test.js      # All 86 tools: stub adapter + correctness assertions
+│   ├── generated_tools.smoke.test.js      # All 88 tools: stub adapter + correctness assertions
 │   ├── schema_validation.test.js          # Negative-path schema tests (11+ tool schemas)
 │   ├── schema_json_openai_compat.test.js  # Published input and output schemas OpenAI/ECMA-262 regex-compatible (#293, #642)
 │   ├── schema_published_parity.test.js    # Zod and the SDK Ajv validator accept the same inputs; no regex flags (#588)
@@ -51,7 +51,7 @@ tests/
 ├── e2e/                     # End-to-end tests
 │   ├── mcp-client.playwright.spec.ts      # Protocol tests (fast, no Docker)
 │   ├── docker.e2e.spec.ts                 # Docker smoke integration (full stack)
-│   ├── docker-all-tools.e2e.spec.ts       # All-tools Docker E2E (86 tools)
+│   ├── docker-all-tools.e2e.spec.ts       # All-tools Docker E2E (88 tools)
 │   ├── compact-surface.e2e.spec.ts        # Compact-surface E2E (15 tools, project docker-e2e-compact-stdio, #681)
 │   └── run-docker-e2e.sh                  # Docker test orchestrator
 └── manual/                  # Live integration tests (real Actual Budget)
@@ -134,7 +134,7 @@ npx playwright test tests/e2e/docker-all-tools.e2e.spec.ts
 **What Docker E2E tests verify:**
 - ✅ Docker build works correctly
 - ✅ Container networking (MCP ↔ Actual Budget)
-- ✅ Real tool execution (**all 86 tools at 100% coverage**)
+- ✅ Real tool execution (**all 88 tools at 100% coverage**)
 - ✅ Session management and persistence
 - ✅ Production-like deployment
 - ✅ Error handling and validation (15+ error scenarios)
@@ -142,7 +142,7 @@ npx playwright test tests/e2e/docker-all-tools.e2e.spec.ts
 
 **Test Suites:**
 - **docker.e2e.spec.ts**: Basic smoke tests (11 tests)
-- **docker-all-tools.e2e.spec.ts**: Comprehensive all-tools test (86 tools, 80+ test cases)
+- **docker-all-tools.e2e.spec.ts**: Comprehensive all-tools test (88 tools, 80+ test cases)
 - **compact-surface.e2e.spec.ts** (#681): the compact leg. Playwright project `docker-e2e-compact-stdio`, run as Step 6c of `run-docker-e2e.sh` over stdio with `MCP_E2E_TOOL_SURFACE=compact` (the stdio client passes it to the server as `MCP_TOOL_SURFACE`). It checks the published 15-tool list, the `get_context` version, a `manage_accounts` create with its `list_entities` read-back and delete, and the refusal of a direct legacy call. Per-action coverage of the compact tools is in `docker-all-tools.e2e.spec.ts`
 
 ### Multi-user ACL E2E (`scripts/acl-e2e.sh`)
@@ -284,7 +284,7 @@ This paragraph is load bearing: `tests/unit/dual_transport_gate.test.js` anchors
 | File | What it tests |
 |---|---|
 | `transactions_create.test.js` | Zod schema: valid input accepted, empty input rejected |
-| `generated_tools.smoke.test.js` | All 86 tools: stub adapter, call succeeds, response shape correct |
+| `generated_tools.smoke.test.js` | All 88 tools: stub adapter, call succeeds, response shape correct |
 | `schema_validation.test.js` | Negative-path schemas: `rules_create`, `budget_updates_batch`, `budgets_transfer`, `budgets_set_amount` |
 | `budget_updates_batch.test.js` | `actual_budget_updates_batch` through the real tool and adapter with raw api stubs: per-item `succeeded`/`failed`, all-items-failing is a normal result, exact Zod messages, whole-call failure propagates, no raw import or `console.*` in the tool (#516) |
 | `rules_create.test.js` | `actual_rules_create` characterisation (#485): the imperative rejections and their exact messages, what is deliberately not rejected, stubbing `adapter.createRule` at the tool boundary so it is unchanged by the schema extraction and the adapter guard. #710: array values for `oneOf` and `notOneOf`, booleans for `cleared`, `reconciled`, `transfer`, `parent`, and the exact refusal for each wrong shape. #711: the shared operator map (field order, `payee_name`, `category_group`), the newly accepted operators reaching the adapter as written, and the exact refusal for an unknown field, a wrong operator (with the id-field hint), and a wrong `isbetween` value |
@@ -377,6 +377,9 @@ This paragraph is load bearing: `tests/unit/dual_transport_gate.test.js` anchors
 | `tool_description_checklist.test.js` | #650: the 24 tool descriptions rewritten for Glama's TDQS (#640, #650) each state a `Returns` sentence, name at least one other tool and only published ones, and carry none of the filler phrases `in Actual Budget.`, `Perfect for`, `Ideal for`; built-in fixtures prove each rule fails. Adding a tool to its lists is the deliberate step that holds it to this floor |
 | `experimental_gate.test.js` | #840: MCP_EXPERIMENTAL: an unknown name refuses startup naming the valid ones; with it unset the published list is byte-identical on the legacy, compact and all surfaces; a gated tool is hidden for MCP_EXPERIMENTAL whatever MCP_TOOLSETS or MCP_TOOLS say, refused by name and by the compact `list_entities` action; server_info reports `experimental`; the per-tool ceiling holds with the feature on |
 | `categories_get_automations.test.js` | #840: the read tool against stubbed upstream bindings: editor-managed and note-managed categories, minor units for 0-place and 2-place currencies, malformed and unknown-type entries reported, cleanup group names, an unknown id refused, and zero sends and zero writes on every case |
+| `internal_send_seam.test.js` | #841: the adapter's internal-send seam: only the five allow-listed handlers reach the sender (each refused name asserted with the exact message, nothing sent), an abandoned operation cannot send, and the real bus reports itself unavailable with no budget session |
+| `budgets_apply_templates.test.js` | #841: `actual_budgets_apply_templates` and the compact `apply_templates` action against raw api stubs and a test sender: the guard order (flag, month range, envelope budget, unknown category, `categoryId` without `overwrite`, template check), which handler each mode sends, one send and never a retry, the re-read diff, `verified: false` when the month never settles, and a negative with its exact message for each refusal |
+| `budgets_run_cleanup.test.js` | #841: `actual_budgets_run_cleanup` and the compact `run_cleanup` action: one send, the diff, the `cleanup-no-funds` and `cleanup-applied-with-errors` notices, `template-errors` as a plain error, the flag, range and tracking refusals with their exact messages, `FeatureDisabledRefusal` classified as a conflict |
 | `experimental_surface_canary.test.js` | #840: `scripts/check-experimental-surface.mjs` against fixture bundles (a removed column, a removed directive, a new 0-place currency code, a third place count, a missing table); the script exits 0 whatever it finds |
 | `tools_list_size_budget.test.js` | #486: the full `tools/list` (all tools, built as the server builds it) stays under a committed total ceiling and a uniform per-tool ceiling; built-in fixtures prove a padded description and a total 1 byte too low are reported by name. Raising a ceiling is a deliberate edit with a comment stating why |
 | `tool_param_descriptions.test.js` | #639: every input property every tool publishes in `tools/list` carries a description, at any depth (union branches, array items, `$ref` targets), with the checked tool count equal to the canonical count; in-file fixtures prove an undescribed top-level, union-branch and array-item field are each reported by full path, and two pins prove the descriptions added no validation |
@@ -426,7 +429,7 @@ This paragraph is load bearing: `tests/unit/dual_transport_gate.test.js` anchors
 npm run test:unit-js   # runs the full unit chain (~52 files) sequentially
 ```
 
-**Coverage**: 86/86 tools smoke-validated (offline, stub adapter). 60+ negative-path assertions across 11+ tool schemas.
+**Coverage**: 88/88 tools smoke-validated (offline, stub adapter). 60+ negative-path assertions across 11+ tool schemas.
 
 ### 2. Adapter Tests
 
@@ -455,7 +458,7 @@ npm run test:adapter
 
 **Scenarios**:
 - MCP client connects to server
-- LibreChat loads all 86 tools
+- LibreChat loads all 88 tools
 - User performs complete workflow via chat
 
 **Run**:
@@ -463,7 +466,7 @@ npm run test:adapter
 npm run test:e2e
 ```
 
-**Status**: Fully operational. `docker-all-tools.e2e.spec.ts` covers all 86 tools end-to-end.
+**Status**: Fully operational. `docker-all-tools.e2e.spec.ts` covers all 88 tools end-to-end.
 
 ### 4. Connection Tests
 
@@ -484,7 +487,7 @@ npm run dev -- --test-actual-connection
 
 ### 5. Tool Tests (deprecated path; use unit tests instead)
 
-**Purpose**: Smoke test all 86 tools
+**Purpose**: Smoke test all 88 tools
 
 **Command**:
 ```bash
@@ -785,10 +788,10 @@ Planned integrations:
 
 ### Current Coverage
 
-- **Unit Tests**: schema/shape smoke tests + 23 negative-path assertions across 86 tools
+- **Unit Tests**: schema/shape smoke tests + 23 negative-path assertions across 88 tools
 - **Adapter Tests**: Infrastructure smoke (retry, concurrency, lifecycle), not per-tool
 - **Docker E2E**: 68/70 tools with named tests (real Actual Budget server); 2 tools excluded (`budgets_list_available` and `budgets_switch` require ≥2 budgets, and the CI stack has 1). All 6 delete tools are named tests with list-absence assertions; `afterAll` is a safety fallback only.
-- **Live Integration**: 86/86 tools called against real budget (all delete tools are named tests in `tests/manual/tests/`)
+- **Live Integration**: 88/88 tools called against real budget (all delete tools are named tests in `tests/manual/tests/`)
 
 ### Coverage Goals
 
@@ -796,8 +799,8 @@ Planned integrations:
 |-----------|---------|--------|----------|
 | Unit Tests | 80% | 90% | High |
 | Adapter Tests | 100% | 100% | Maintain |
-| Integration Tests | 86/86 tools (live) | Maintain | Medium |
-| E2E Tests | All 86 tools (Docker) | Maintain | Medium |
+| Integration Tests | 88/88 tools (live) | Maintain | Medium |
+| E2E Tests | All 88 tools (Docker) | Maintain | Medium |
 
 ### Measuring Coverage
 
@@ -1029,7 +1032,7 @@ This project follows a comprehensive testing strategy with multiple levels, from
                       /         \
                     /             \
                   /   Level 5:      \
-                /   Full E2E Tests    \    ← All 86 tools + Error scenarios
+                /   Full E2E Tests    \    ← All 88 tools + Error scenarios
               /     (Docker Stack)      \
             /                              \
           /        Level 4: Protocol E2E    \  ← MCP protocol compliance
@@ -1054,14 +1057,14 @@ This project follows a comprehensive testing strategy with multiple levels, from
 **Command:** `npm run test:adapter`
 
 **Coverage:**
-- ✅ All 86 tools registered correctly
+- ✅ All 88 tools registered correctly
 - ✅ Tool schemas valid (Zod validation)
 - ✅ Tool descriptions present
 - ✅ Basic tool invocation works
 
 **Test Files:**
 - `src/tests_adapter_runner.ts` - Main adapter test runner
-- `tests/unit/generated_tools.smoke.test.js` - All 86 tools smoke validation
+- `tests/unit/generated_tools.smoke.test.js` - All 88 tools smoke validation
 
 **Success Criteria:**
 - All tools found in registry
@@ -1086,7 +1089,7 @@ This project follows a comprehensive testing strategy with multiple levels, from
 | File | What it tests | Assertions |
 |---|---|---|
 | `transactions_create.test.js` | Zod schema for `transactions_create`: valid input accepted, empty rejected | 2 |
-| `generated_tools.smoke.test.js` | All 86 tools: stub adapter, `call()` succeeds, response shape verified per-tool | 86 + shape checks |
+| `generated_tools.smoke.test.js` | All 88 tools: stub adapter, `call()` succeeds, response shape verified per-tool | 88 + shape checks |
 | `schema_validation.test.js` | Negative-path schema + runtime guards for 11+ tool schemas | 60+ |
 | `contributor_docs.test.js` | Contributor docs (AGENTS.md, CONTRIBUTING.md, PR template, SUPPORT.md, CODE_OF_CONDUCT.md): real scripts, tracked links, `AGENTS.md` required and short, PR template at most 40 lines, the docs-to-update section links a document in every row, instructions files defer to it (#496, #609, #697) | 20+ |
 | `toolsets.test.js` | Toolset policy: partition, preset, read-only set and its call-graph guard, refusal, fail-closed (#483); alias policy (#652) | 58 |
@@ -1156,6 +1159,9 @@ This project follows a comprehensive testing strategy with multiple levels, from
 | `experimental_gate.test.js` | MCP_EXPERIMENTAL gate: startup refusal, byte-identical default lists, hidden-reason precedence, refusals (#840) | 27 |
 | `categories_get_automations.test.js` | Category automations read tool: editor and note sources, minor units, errors, no send and no write (#840) | see file |
 | `experimental_surface_canary.test.js` | Experimental surface canary: fixture drifts reported, script exits 0 (#840) | see file |
+| `internal_send_seam.test.js` | Internal-send seam: allow-list, abandoned-operation and no-session cases (#841) | see file |
+| `budgets_apply_templates.test.js` | Budget templates tool: guard order, routes, no retry, diff and verified (#841) | see file |
+| `budgets_run_cleanup.test.js` | Budget cleanup tool: notices, plain error after the send, refusals (#841) | see file |
 | `tools_list_size_budget.test.js` | tools/list size budget: total and per-tool ceilings, padded-description and 1-byte-under fixtures (#486) | 5 |
 | `tool_param_descriptions.test.js` | Every published input property is described at any depth; fixture self-test and no-validation-change pins (#639) | 10 |
 | `tool_titles.test.js` | Every published tool has a unique, well-formed title that agrees with its read-only hint (#641) | 27 |
@@ -1202,7 +1208,7 @@ This project follows a comprehensive testing strategy with multiple levels, from
 | `bot_target_branch.test.js` | #265: every dependabot update block carries target-branch develop and the inert renovate config's baseBranches includes develop with the activation warning; a bot PR against fast-forward-only main is structurally unmergeable | 2 + 2 negative |
 
 **Coverage:**
-- ✅ All 86 tools: stub invocation + response-shape assertion
+- ✅ All 88 tools: stub invocation + response-shape assertion
 - ✅ Schema parse rejection for empty/invalid inputs (11+ tools, 60+ cases)
 - ✅ Runtime guard rejection: `amount ≤ 0`, `fromId === toId` in `budgets_transfer`
 - ✅ Schema correctness: parse errors with provided examples surface as test failures
@@ -1235,7 +1241,7 @@ This project follows a comprehensive testing strategy with multiple levels, from
 | Test | Success Case | Error Case |
 |------|-------------|------------|
 | Initialize | ✅ Valid protocol version | ❌ Unsupported version |
-| List Tools | ✅ Returns 86 tools | ❌ Timeout |
+| List Tools | ✅ Returns 88 tools | ❌ Timeout |
 | Call Tool | ✅ Executes tool | ❌ Unknown tool (-32602) |
 | Session Persistence | ✅ Same session across calls | ❌ Session expired |
 | Health Check | ✅ Status: ok | ❌ Status: not-initialized |
@@ -1264,7 +1270,7 @@ This project follows a comprehensive testing strategy with multiple levels, from
 - ✅ Docker build correctness
 - ✅ Container networking
 - ✅ Real Actual Budget integration
-- ✅ **ALL 86 tools execution (100% coverage)**
+- ✅ **ALL 88 tools execution (100% coverage)**
 - ✅ Session management (including `actual_session_close`)
 - ✅ Error handling (15+ error scenarios)
 - ✅ Regression tests (strict validation, large batches, edge cases)
@@ -1275,7 +1281,7 @@ This project follows a comprehensive testing strategy with multiple levels, from
 |---|-----------|-----------------|-----------------|
 | 1 | Initialize MCP session | ✅ Session created | ❌ Auth failure, timeout |
 | 2 | Verify services healthy | ✅ Status: ok | ❌ Not initialized, Actual unreachable |
-| 3 | List all tools | ✅ 86 tools returned | ❌ Timeout, server error |
+| 3 | List all tools | ✅ 88 tools returned | ❌ Timeout, server error |
 | 4 | Execute actual_server_info | ✅ Server version returned | ❌ Connection refused |
 | 5 | List accounts | ✅ Account array returned | ❌ Database error |
 | 6 | Create test account | ✅ Account ID returned | ❌ Duplicate name, validation error |
@@ -1287,10 +1293,10 @@ This project follows a comprehensive testing strategy with multiple levels, from
 
 **Comprehensive All-Tools Tests (docker-all-tools.e2e.spec.ts - 80+ tests, ~120s):**
 
-The authoritative per-domain breakdown lives in `tests/e2e/docker-all-tools.e2e.spec.ts` (describe block `Docker E2E - ALL 86 TOOLS`): it exercises all 86 tools plus error scenarios. The per-category counts are not duplicated here, because a hand-maintained copy drifts.
+The authoritative per-domain breakdown lives in `tests/e2e/docker-all-tools.e2e.spec.ts` (describe block `Docker E2E - ALL 88 TOOLS`): it exercises all 88 tools plus error scenarios. The per-category counts are not duplicated here, because a hand-maintained copy drifts.
 
 **Success Criteria:**
-- All 86 tools execute successfully
+- All 88 tools execute successfully
 - Error scenarios handled gracefully
 - Docker containers healthy
 - No data corruption
@@ -1332,7 +1338,7 @@ The authoritative per-domain breakdown lives in `tests/e2e/docker-all-tools.e2e.
 
 ### Level 6: Manual Integration Tests 🧪 (Comprehensive: ~60s)
 
-**Purpose:** Test all 86 tools with real Actual Budget data  
+**Purpose:** Test all 88 tools with real Actual Budget data  
 **Location:** `tests/manual/index.js` (entry point), `tests/manual/tests/` (16 domain modules)  
 **Command:** `npm run test:integration:full`
 
@@ -1370,7 +1376,7 @@ The authoritative per-domain breakdown lives in `tests/e2e/docker-all-tools.e2e.
 - ❌ Delete non-existent account
 - ❌ Reopen already-open account
 
-#### FULL Level (86 tools, 100% coverage)
+#### FULL Level (88 tools, 100% coverage)
 
 **Account Tools (7):**
 - ✅ All NORMAL account tests
@@ -1451,7 +1457,7 @@ The authoritative per-domain breakdown lives in `tests/e2e/docker-all-tools.e2e.
 - ❌ Close invalid session ID
 
 **Success Criteria:**
-- All 86 tools execute successfully
+- All 88 tools execute successfully
 - Error scenarios handled gracefully
 - Test data cleaned up properly
 - No data corruption
@@ -1504,7 +1510,7 @@ npm run test:all                 # All automated tests (90s)
 
 **Pre-Release (Manual):**
 ```bash
-# Full manual integration test with all 86 tools
+# Full manual integration test with all 88 tools
 npm run test:integration:full
 
 # Cleanup only (remove leftover MCP-* test data)
@@ -1518,11 +1524,11 @@ npm run test:integration:cleanup
 | Test Level | Current Coverage | Target Coverage | Priority |
 |------------|-----------------|-----------------|----------|
 | **Level 1:** Adapter Smoke | 100% (adapter infra) | 100% | ✅ Maintain |
-| **Level 2:** Unit Tests | 86/86 tools (stub), 23 schema assertions | Maintain + grow | ✅ Good |
-| **Level 3:** Live Integration | 86/86 tools called | 86/86 | ✅ Maintain |
+| **Level 2:** Unit Tests | 88/88 tools (stub), 23 schema assertions | Maintain + grow | ✅ Good |
+| **Level 3:** Live Integration | 88/88 tools called | 88/88 | ✅ Maintain |
 | **Level 4:** Protocol E2E | 100% (MCP compliance) | 100% | ✅ Maintain |
 | **Level 5:** Docker E2E | **68/70 tools** (100% named; 2 excluded for single-budget CI) | 100% | ✅ Maintain |
-| **Level 6:** Manual Full | 100% (86/86 tools) | 100% | ✅ Maintain |
+| **Level 6:** Manual Full | 100% (88/88 tools) | 100% | ✅ Maintain |
 | **Error Scenarios** | ~70% | 90% | 🟡 Medium |
 
 ---
@@ -1531,7 +1537,7 @@ npm run test:integration:cleanup
 
 **High Priority:**
 1. ✅ **Completed:** Docker E2E tests with 68/70 tools named (2 excluded: `budgets_list_available`, `budgets_switch` due to single-budget CI constraint)
-2. ✅ **Completed:** Unit test suite (~52 files), 86-tool smoke, 23 negative-path assertions
+2. ✅ **Completed:** Unit test suite (~52 files), 88-tool smoke, 23 negative-path assertions
 3. ✅ **Completed:** All 6 delete tools promoted to named E2E tests with list-absence assertions; `afterAll` is now fallback-only
 4. ✅ **Completed:** Shared `tests/shared/mcp-protocol.js` utility (MCP envelope parsing, reused across E2E and integration tests)
 5. ⏳ **TODO:** Add business logic error tests (duplicate accounts, insufficient funds)

@@ -122,12 +122,12 @@ npx actual-mcp-server --http
 ## Verify your setup
 
 1. In a new conversation in your client, ask: "List my Actual Budget accounts and their balances." You should get your accounts back.
-2. Over HTTP, `tools/list` should return **15 tools over 86 operations** (the default compact surface; 85 is the legacy surface under `MCP_TOOL_SURFACE=legacy`). The count comes from that HTTP check: the stdio `initialize` probe lists no tools.
+2. Over HTTP, `tools/list` should return **15 tools over 88 operations** (the default compact surface; 85 is the legacy surface under `MCP_TOOL_SURFACE=legacy`). The count comes from that HTTP check: the stdio `initialize` probe lists no tools.
 3. For a stdio client, check the server by hand before blaming the client: send one `initialize` request and look for `serverInfo` in the reply. The command is in [verify your setup](docs/guides/clients/README.md#verify) in the client guide.
 
 ## Under the hood
 
-**15 tools over 86 operations** covering accounts, transactions, budgets, rules, schedules and more, over stdio or HTTP, with Bearer token or OIDC auth, per-user budget access, up to 15 concurrent sessions, and automatic retry of transient Actual errors (3 attempts, exponential backoff; deletes and merges are never retried).
+**15 tools over 88 operations** covering accounts, transactions, budgets, rules, schedules and more, over stdio or HTTP, with Bearer token or OIDC auth, per-user budget access, up to 15 concurrent sessions, and automatic retry of transient Actual errors (3 attempts, exponential backoff; deletes and merges are never retried).
 
 ## Privacy
 
@@ -180,7 +180,7 @@ Amounts are integer cents and dates are `YYYY-MM-DD` strings. Each tool takes an
 
 ### Reducing the tool surface
 
-By default the server serves 15 tools over 86 operations (the compact surface, `MCP_TOOL_SURFACE=compact`). Set `MCP_TOOL_SURFACE=legacy` to publish the 85 `actual_*` tools instead; the toolset names and counts in the table below are operations, and a compact tool is listed when at least one operation behind it is selected. A call to an operation a toolset leaves out is refused naming `MCP_TOOLSETS`. A tool that is not published is also refused if a client calls it by name. One experimental operation needs `MCP_EXPERIMENTAL=budget_automations`.
+By default the server serves 15 tools over 88 operations (the compact surface, `MCP_TOOL_SURFACE=compact`). Set `MCP_TOOL_SURFACE=legacy` to publish the 85 `actual_*` tools instead; the toolset names and counts in the table below are operations, and a compact tool is listed when at least one operation behind it is selected. A call to an operation a toolset leaves out is refused naming `MCP_TOOLSETS`. A tool that is not published is also refused if a client calls it by name. One experimental operation needs `MCP_EXPERIMENTAL=budget_automations`.
 
 <!-- BEGIN GENERATED: tools-summary -->
 <!-- Generated from dist/src/lib/toolsets.js by `npm run docs:gen`. Do not edit. -->
@@ -189,7 +189,7 @@ By default the server serves 15 tools over 86 operations (the compact surface, `
 | `context` | 14 | Orientation, lookups and server information |
 | `transactions` | 14 | Transaction reads, create, update, delete, import and transfers |
 | `analysis` | 7 | Summaries, aggregates and balances |
-| `budget` | 11 | Budget months, amounts, carryover, holds, transfers, batch updates and notes |
+| `budget` | 13 | Budget months, amounts, carryover, holds, transfers, batch updates and notes |
 | `rules` | 7 | Rules and payee rules, including `actual_rules_create_batch` |
 | `schedules` | 5 | Scheduled transactions |
 | `structure` | 21 | Accounts, account groups, categories, category groups, payees and tags |
@@ -200,7 +200,7 @@ On the default compact surface the `chat` preset publishes 6 tools: `get_context
 
 With `MCP_TOOL_SURFACE=legacy` the `chat` preset publishes 16 tools: `actual_get_context`, `actual_query_run`, `actual_transactions_update_batch`, `actual_budget_updates_batch`, `actual_rules_create_batch`, `actual_transactions_create`, `actual_transactions_update`, `actual_transactions_delete`, `actual_rules_create`, `actual_budgets_transfer`, `actual_budgets_set_amount`, `actual_budgets_get_month`, `actual_budgets_get_months`, `actual_server_info`, `actual_server_get_version` and `actual_preferences_get`.
 
-`MCP_READ_ONLY=true` publishes 6 compact tools (`get_context`, `list_entities`, `search_transactions`, `summarize_transactions`, `list_budget_months` and `run_query`); every tool that can write is hidden whole. With `MCP_TOOL_SURFACE=legacy` it hides and refuses 48 write-capable tools and leaves 37 published.
+`MCP_READ_ONLY=true` publishes 6 compact tools (`get_context`, `list_entities`, `search_transactions`, `summarize_transactions`, `list_budget_months` and `run_query`); every tool that can write is hidden whole. With `MCP_TOOL_SURFACE=legacy` it hides and refuses 50 write-capable tools and leaves 37 published.
 <!-- END GENERATED: tools-summary -->
 
 How large the `tools/list` response is for each choice, so you can pick for a small tool budget:
@@ -209,8 +209,8 @@ How large the `tools/list` response is for each choice, so you can pick for a sm
 <!-- Generated from scripts/docs/tools-list-sizes.json by `npm run docs:gen`. Do not edit. -->
 | Configuration | Tools | `tools/list` bytes | KiB |
 |---------------|-------|--------------------|-----|
-| Compact surface (default) | 15 | 44852 | 43.8 |
-| Compact, `MCP_TOOLSETS=chat` | 6 | 14697 | 14.4 |
+| Compact surface (default) | 15 | 44460 | 43.4 |
+| Compact, `MCP_TOOLSETS=chat` | 6 | 14419 | 14.1 |
 | Compact, `MCP_READ_ONLY=true` | 6 | 18207 | 17.8 |
 | `MCP_TOOL_SURFACE=legacy` | 85 | 127058 | 124.1 |
 | Legacy, `MCP_TOOLSETS=chat` | 16 | 29236 | 28.6 |

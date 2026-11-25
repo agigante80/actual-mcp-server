@@ -37,6 +37,8 @@ services:
       # Host dir tests/fixtures/budgets, in-container /app/test-data: the name split is deliberate
       # (scripts/bootstrap-and-init.sh and scripts/import-test-budget.sh resolve test-data/ under /app).
       - ../fixtures/budgets:/app/test-data:ro
+      # #841: turns the Goal templates setting on in the imported budget, on the server, before the MCP container downloads it.
+      - ./enable-goal-templates.mjs:/app/enable-goal-templates.mjs:ro
     user: root
     entrypoint: [ "/bin/sh" ]
     command:
@@ -54,7 +56,7 @@ services:
         done
         # Skip the wait in bootstrap script since we already waited
         export SKIP_SERVER_WAIT=true
-        sh scripts/bootstrap-and-init.sh
+        sh scripts/bootstrap-and-init.sh && node /app/enable-goal-templates.mjs
     networks:
       - e2e-test-network
 
@@ -104,6 +106,8 @@ services:
       # Host dir tests/fixtures/budgets, in-container /app/test-data: the name split is deliberate
       # (scripts/bootstrap-and-init.sh and scripts/import-test-budget.sh resolve test-data/ under /app).
       - ../fixtures/budgets:/app/test-data:ro
+      # #841: turns the Goal templates setting on in the imported budget, on the server, before the MCP container downloads it.
+      - ./enable-goal-templates.mjs:/app/enable-goal-templates.mjs:ro
     user: root
     entrypoint: [ "/bin/sh" ]
     command:
@@ -120,7 +124,7 @@ services:
           sleep 2
         done
         export SKIP_SERVER_WAIT=true
-        sh scripts/bootstrap-and-init.sh
+        sh scripts/bootstrap-and-init.sh && node /app/enable-goal-templates.mjs
     networks:
       - e2e-test-network
 

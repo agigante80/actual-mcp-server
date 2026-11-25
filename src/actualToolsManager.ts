@@ -105,6 +105,8 @@ const IMPLEMENTED_TOOLS = [
   'actual_notes_get',
   'actual_notes_update',
   'actual_categories_get_automations',
+  'actual_budgets_apply_templates',
+  'actual_budgets_run_cleanup',
   'actual_budgets_export',
   'actual_budgets_import',
   'actual_preferences_get',

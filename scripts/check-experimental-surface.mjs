@@ -39,6 +39,21 @@ export const REQUIRED_STRINGS = [
   ['#template', 'the note directive'],
   ['#goal', 'the note directive'],
   ['#cleanup', 'the note directive'],
+  // #841: the internal handlers the template tools send to, and the replies they branch on. The
+  // flag id flags.goalTemplatesEnabled is NOT here: it lives in the desktop client, not this bundle.
+  ['budget/check-templates', 'the template check handler'],
+  ['budget/apply-goal-template', 'the month-wide apply handler'],
+  ['budget/overwrite-goal-template', 'the overwrite apply handler'],
+  ['budget/apply-single-template', 'the single-category apply handler'],
+  ['budget/cleanup-goal-template', 'the cleanup handler'],
+  ['templates-applied', 'an apply reply'],
+  ['templates-up-to-date', 'an apply reply'],
+  ['templates-check-passed', 'a check reply'],
+  ['template-errors', 'the check and apply error reply'],
+  ['cleanup-applied', 'a cleanup reply'],
+  ['cleanup-up-to-date', 'a cleanup reply'],
+  ['cleanup-no-funds', 'a cleanup reply'],
+  ['cleanup-applied-with-errors', 'a cleanup reply'],
 ];
 
 /** Extract `[{ code, decimalPlaces }]` from the bundle's `var currencies = [ ... ];` table. */

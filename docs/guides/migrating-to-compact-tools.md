@@ -98,6 +98,8 @@ On `manage_accounts` and `manage_categories`, `entity` is required for `create`,
 | `actual_notes_get` | `list_entities` (`type: "note"`) | none |
 | `actual_notes_update` | `manage_accounts` (`action: "set_note"`)<br>`manage_categories` (`action: "set_note"`)<br>`manage_payees` (`action: "set_note"`)<br>`manage_budget_months` (`action: "set_note"`) | none<br>none<br>none<br>`month` becomes `id: "budget-<month>"`, so `month: "2026-11"` is sent as `id: "budget-2026-11"` |
 | `actual_categories_get_automations` | `list_entities` (`type: "category_automations"`) | `category_id` is sent as `categoryId` |
+| `actual_budgets_apply_templates` | `manage_budget_months` (`action: "apply_templates"`) | `category_id` is sent as `categoryId` |
+| `actual_budgets_run_cleanup` | `manage_budget_months` (`action: "run_cleanup"`) | none |
 | `actual_budgets_export` | `manage_budget_files` (`action: "export"`) | none |
 | `actual_budgets_import` | `manage_budget_files` (`action: "import"`) | none |
 | `actual_preferences_get` | `get_context` (`topic: "preferences"`) | none |

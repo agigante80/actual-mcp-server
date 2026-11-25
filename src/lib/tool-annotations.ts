@@ -144,6 +144,9 @@ const DESTRUCTIVE = new Set<string>([
   // Under the policy above (a field overwrite is additive) that is the line, and it is a
   // judgement call rather than a derivation.
   'actual_bank_sync',
+  // #841: apply_templates REPLACES budgeted amounts (and can lower them); run_cleanup moves money between categories. Neither is idempotent.
+  'actual_budgets_apply_templates',
+  'actual_budgets_run_cleanup',
   'actual_budgets_export',
   // #687: the import replaces nothing, but it is irreversible from here (it adds a server budget
   // file no tool removes), so the hint stays to make a client ask first.

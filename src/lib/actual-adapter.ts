@@ -80,7 +80,12 @@ import { withOpTimeout, runAbandonable, assertOperationLive } from './opTimeout.
 import { markInitFailure } from './init-failure.js';
 import { MAX_BUDGET_AMOUNT_CENTS } from './budget-limits.js';
 import { incomeSetAmountRefusal, incomeTransferRefusal, isTrackingBudgetMonth } from './actual-adapter/budget-income.js';
-import { ConflictRefusal, LockedRefusal, NotFoundRefusal, OutOfRangeRefusal, constraintErrorMsg, errorLogFields, isPreflightRefusal } from './errors.js';
+import {
+  DEFAULT_SETTLE, GOAL_TEMPLATES_DISABLED_MESSAGE, GOAL_TEMPLATES_FLAG, KNOWN_APPLY_REPLIES, KNOWN_CLEANUP_REPLIES, TRACKING_BUDGET_MESSAGE,
+  assertMonthInRange, diffMonthRows, isFlagOn, matchingCheckEntries, monthCategoryRows, readReply, readUntilSettled, templateCheckMessage,
+  type BudgetChange,
+} from './actual-adapter/budget-templates.js';
+import { ConflictRefusal, FeatureDisabledRefusal, LockedRefusal, NotFoundRefusal, OutOfRangeRefusal, constraintErrorMsg, errorLogFields, isPreflightRefusal } from './errors.js';
 
 // #800: every raw WRITE binding refuses to run once its operation was abandoned after the write
 // timeout (see opTimeout.ts). One chokepoint at the binding, so no tool or adapter call site
@@ -2758,13 +2763,7 @@ export async function setBudgetAmount(month: string | undefined, categoryId: str
     const months = await withConcurrency(() =>
       retry(() => rawGetBudgetMonths() as Promise<string[]>, { retries: 2, backoffMs: 200 })
     );
-    if (Array.isArray(months) && months.length > 0 && !months.includes(String(month))) {
-      throw new OutOfRangeRefusal(
-        `Month "${month}" is outside this budget's range, which runs from ${months[0]} to ` +
-          `${months[months.length - 1]}. Use actual_budgets_get_months to see the months you can budget to.`,
-        String(month),
-      );
-    }
+    assertMonthInRange(months, month);
 
     // #759: on an envelope budget upstream builds no budget cell for an income category, so the
     // row this write would INSERT is one nothing reads. A tracking budget does read it, so the
@@ -6393,6 +6392,170 @@ export async function getCategoryAutomations(categoryId: string): Promise<Editor
   });
 }
 
+/**
+ * The internal-send seam (#841, ADR 0003). A few experimental tools can only be done through
+ * upstream's internal handler bus (`api.internal.send`), which the public api does not wrap. This is
+ * the ONE place that touches it, and it is closed: a name outside INTERNAL_SEND_ALLOWED is refused
+ * before anything is sent, whatever the caller (or a later ticket) passes. #842 adds its handlers
+ * here, one reviewed line each. The allow-list check sits OUTSIDE the replaceable function so a test
+ * double cannot bypass it. The send is a write path: it goes through assertOperationLive like every
+ * guarded raw write, so an abandoned operation cannot send.
+ */
+const INTERNAL_SEND_ALLOWED: ReadonlySet<string> = new Set([
+  'budget/check-templates',
+  'budget/apply-goal-template',
+  'budget/overwrite-goal-template',
+  'budget/apply-single-template',
+  'budget/cleanup-goal-template',
+]);
+
+type InternalSendImpl = (name: string, args?: unknown) => Promise<unknown>;
+
+const defaultInternalSend: InternalSendImpl = async (name, args) => {
+  // Read at call time: `internal` is a getter that is null until a session is open.
+  const internal = (api as any).internal as { send?: InternalSendImpl } | null | undefined; // eslint-disable-line @typescript-eslint/no-explicit-any
+  if (!internal || typeof internal.send !== 'function') {
+    throw new Error("Actual's internal handler bus is unavailable: no budget session is open.");
+  }
+  return internal.send(name, args);
+};
+let internalSendImpl: InternalSendImpl = defaultInternalSend;
+
+/** Test seam: replace the function that performs the send. The allow-list stays in force. Pass nothing to restore. */
+export function _setInternalSendForTests(fn?: InternalSendImpl): void {
+  internalSendImpl = fn ?? defaultInternalSend;
+}
+
+export async function internalSend(name: string, args?: unknown): Promise<unknown> {
+  if (!INTERNAL_SEND_ALLOWED.has(name)) {
+    throw new Error(`Internal handler "${name}" is not on this server's allow-list.`);
+  }
+  assertOperationLive();
+  return internalSendImpl(name, args);
+}
+
+/**
+ * Whether a synced budget flag (a row of the `preferences` AQL table, stored as text) is on. A new
+ * experimental feature that depends on a flag reads it through here (#842 will). Inside one api
+ * cycle: it uses the raw binding, never an exported adapter method.
+ */
+async function isBudgetFlagOn(flagId: string): Promise<boolean> {
+  const { q } = (await import('@actual-app/api')) as any; // eslint-disable-line @typescript-eslint/no-explicit-any
+  const res = await withConcurrency(() => retry(
+    async () => (await rawRunQuery(q('preferences').filter({ id: flagId }).select(['id', 'value']))) as { data?: Array<{ value?: unknown }> } | undefined,
+    { retries: 2, backoffMs: 200 },
+  ));
+  return isFlagOn(res?.data?.[0]?.value);
+}
+
+export interface BudgetTemplateResult {
+  month: string;
+  /** False when the settle bound was reached: the month may still be changing, re-read it. */
+  verified: boolean;
+  changes: BudgetChange[];
+  /** A warning upstream attached to a cleanup that moved money only partly or not at all. */
+  notice?: string;
+}
+
+/**
+ * Shared body of the two template writes: every guard runs BEFORE the first send, the send is made
+ * once and never retried, and the result is what a re-read of the month shows (upstream's reply
+ * does not say what changed).
+ */
+async function runTemplateWrite(
+  kind: 'apply' | 'cleanup',
+  month: string,
+  opts: { categoryId?: string; overwrite?: boolean },
+): Promise<BudgetTemplateResult> {
+  const opStartedAt = Date.now();
+  const read = <R>(fn: () => Promise<R>): Promise<R> =>
+    withConcurrency(() => retry(fn, { retries: 2, backoffMs: 200, isRetryable: isRetryableError }));
+
+  // 1. The flag: upstream does not enforce it, so the adapter does.
+  if (!(await isBudgetFlagOn(GOAL_TEMPLATES_FLAG))) throw new FeatureDisabledRefusal(GOAL_TEMPLATES_DISABLED_MESSAGE);
+
+  // 2. The month range (shared with setBudgetAmount).
+  assertMonthInRange(await read(() => rawGetBudgetMonths() as Promise<string[]>), month);
+
+  // 3. An envelope budget: a tracking budget has no envelopes to fill or sweep.
+  const beforeMonth = await read(() => rawGetBudgetMonth(month) as Promise<unknown>);
+  if (isTrackingBudgetMonth(beforeMonth)) throw new ConflictRefusal(TRACKING_BUDGET_MESSAGE);
+  const before = monthCategoryRows(beforeMonth);
+
+  // 4. The category, for a single-category apply.
+  let categoryName: string | undefined;
+  if (opts.categoryId !== undefined) {
+    const categories = await read(() => readDrainListing('categories', () => rawGetCategories() as Promise<Array<{ id: string; name?: string }>>));
+    const found = (categories as Array<{ id: string; name?: string }>).find((c) => c.id === opts.categoryId);
+    if (!found) throw new NotFoundRefusal('Category', opts.categoryId, 'actual_categories_get');
+    categoryName = found.name ?? opts.categoryId;
+  }
+
+  // 5. The template check, for an apply: bad notes make a half-applied month.
+  if (kind === 'apply') {
+    const check = readReply(await internalSend('budget/check-templates'));
+    if (check.message === 'template-errors') {
+      const entries = matchingCheckEntries(check.pre, categoryName);
+      if (entries.length > 0) throw new OutOfRangeRefusal(templateCheckMessage(entries), month);
+    }
+  }
+
+  // The write. Never retried: a repeat would apply the templates twice.
+  let notice: string | undefined;
+  if (kind === 'apply') {
+    const reply = readReply(
+      opts.categoryId !== undefined
+        ? await internalSend('budget/apply-single-template', { month, category: opts.categoryId })
+        : await internalSend(opts.overwrite ? 'budget/overwrite-goal-template' : 'budget/apply-goal-template', { month }),
+    );
+    if (reply.message === 'template-errors') {
+      throw new Error(`Actual reported template errors after the apply started; stored templates may already have been rewritten. Upstream said: ${reply.pre ?? '(no detail)'}`);
+    }
+    if (!reply.message || !KNOWN_APPLY_REPLIES.has(reply.message)) {
+      logger.warn('[ADAPTER] unrecognised reply to a template apply; reporting what a re-read shows', { reply: reply.message ?? null });
+    }
+  } else {
+    const reply = readReply(await internalSend('budget/cleanup-goal-template', { month }));
+    if (reply.message === 'template-errors') {
+      throw new Error(`Actual reported template errors during the cleanup; some money may already have moved. Upstream said: ${reply.pre ?? '(no detail)'}`);
+    }
+    if (reply.message === 'cleanup-applied-with-errors' || reply.message === 'cleanup-no-funds') {
+      notice = reply.pre ?? reply.message;
+      logger.warn('[ADAPTER] cleanup finished with a warning', { reply: reply.message });
+    } else if (!reply.message || !KNOWN_CLEANUP_REPLIES.has(reply.message)) {
+      logger.warn('[ADAPTER] unrecognised reply to a cleanup; reporting what a re-read shows', { reply: reply.message ?? null });
+    }
+  }
+
+  // The result: re-read until two reads agree (a raw write lands late, #493), within the op deadline.
+  const T = config.ACTUAL_OP_TIMEOUT_MS;
+  const deadline = T > 0 ? opStartedAt + Math.floor(T / 2) : 0;
+  const { rows, settled } = await readUntilSettled(
+    async () => monthCategoryRows(await read(() => rawGetBudgetMonth(month) as Promise<unknown>)),
+    DEFAULT_SETTLE,
+    deadline,
+  );
+  return { month, verified: settled, changes: diffMonthRows(before, rows), ...(notice !== undefined ? { notice } : {}) };
+}
+
+/**
+ * Experimental feature `budget_automations`: apply the Goal templates of one month (or of one
+ * category with overwrite). ONE write operation; see runTemplateWrite for the guard order.
+ */
+export async function applyBudgetTemplates(month: string, opts: { categoryId?: string; overwrite?: boolean } = {}): Promise<BudgetTemplateResult> {
+  observability.incrementToolCall('actual.budgets.applyTemplates').catch(() => {});
+  if (opts.categoryId !== undefined && opts.overwrite !== true) {
+    throw new OutOfRangeRefusal("categoryId always replaces that category's budgeted amount: pass overwrite: true to confirm.", opts.categoryId);
+  }
+  return queueWriteOperation(() => runTemplateWrite('apply', month, opts), { preservesListings: ['accounts', 'categories', 'categoryGroups', 'payees'] });
+}
+
+/** Experimental feature `budget_automations`: run end of month cleanup for one month. ONE write operation. */
+export async function runBudgetCleanup(month: string): Promise<BudgetTemplateResult> {
+  observability.incrementToolCall('actual.budgets.runCleanup').catch(() => {});
+  return queueWriteOperation(() => runTemplateWrite('cleanup', month, {}), { preservesListings: ['accounts', 'categories', 'categoryGroups', 'payees'] });
+}
+
 export default {
   getAccounts,
   resolveFilterId,
@@ -6417,6 +6580,8 @@ export default {
   deleteTag,
   getNote,
   getCategoryAutomations,
+  applyBudgetTemplates,
+  runBudgetCleanup,
   updateNote,
   getBudgetMonths,
   getBudgetMonth,

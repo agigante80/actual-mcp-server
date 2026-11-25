@@ -167,6 +167,9 @@ console.log('Running generated tools smoke tests');
     getNote: { id: '00000000-0000-0000-0000-0000000000ab', note: 'hi' },
     // experimental budget_automations read (#840): a note-managed category with one directive line
     getCategoryAutomations: { categoryId: '00000000-0000-4000-8000-000000000001', source: 'notes', noteDirectives: ['#template 50'], cleanup: [] },
+    // experimental budget_automations writes (#841)
+    applyBudgetTemplates: { month: '2026-01', verified: true, changes: [] },
+    runBudgetCleanup: { month: '2026-01', verified: true, changes: [] },
     updateNote: null,
     // #332/#333/#334: export returns a non-empty zip buffer (the tool rejects an
     // empty one), import returns the new budget id, preferences a synced-prefs map.
@@ -284,6 +287,7 @@ console.log('Running generated tools smoke tests');
   if (name.includes('tags_delete')) inputExample.id = '00000000-0000-0000-0000-0000000000aa';
   if (name.includes('notes_get')) inputExample.id = '00000000-0000-0000-0000-0000000000ab';
   if (name.includes('categories_get_automations')) inputExample.categoryId = '00000000-0000-4000-8000-000000000001';
+  if (name.includes('budgets_apply_templates') || name.includes('budgets_run_cleanup')) inputExample.month = '2026-01';
   // notes_update: use a budget-YYYY-MM id to bypass the entity-lookup guard
   // (the smoke test stubs return empty entity lists, so a UUID would fail the guard)
   if (name.includes('notes_update')) inputExample.id = 'budget-2026-01', inputExample.note = '#template 250';
@@ -510,6 +514,14 @@ console.log('Running generated tools smoke tests');
         if (r?.source !== 'notes' && r?.source !== 'ui') shapeErr(`expected result.source to be notes or ui`);
         if (typeof r?.categoryId !== 'string') shapeErr(`expected result.categoryId to be a string`);
         if (!Array.isArray(r?.cleanup)) shapeErr(`expected result.cleanup to be a list`);
+      }
+      // apply_templates and run_cleanup (#841): createTool wraps the result in { result }
+      if (n === 'budgets_apply_templates' || n === 'budgets_run_cleanup') {
+        if (!res || !('result' in res)) shapeErr('expected { result } wrapper');
+        const r = res.result;
+        if (r?.month !== '2026-01') shapeErr('expected result.month to echo the month');
+        if (typeof r?.verified !== 'boolean') shapeErr('expected result.verified to be a boolean');
+        if (!Array.isArray(r?.changes)) shapeErr('expected result.changes to be a list');
       }
       // notes_update: createTool wraps the result in { result }
       if (n === 'notes_update') {

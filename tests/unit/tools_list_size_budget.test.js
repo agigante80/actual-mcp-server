@@ -125,7 +125,12 @@ const PER_TOOL_CEILING = 3900;
 // list is unchanged (TOTAL_CEILING above is not raised); enabling the feature adds one tool,
 // actual_categories_get_automations. Measured with the feature on: 86 tools, 128,406 bytes
 // (127,058 default), heaviest entry 3,893 bytes; the ceiling is that plus 8.
-const EXPERIMENTAL_TOTAL_CEILING = 128414;
+// #841 adds actual_budgets_apply_templates and actual_budgets_run_cleanup to the same feature. Measured
+// with the feature on: 88 tools, 132,587 bytes (128,406 before, 4,181 added), heaviest entry
+// 3,893 bytes; the ceiling is that plus 8. The default list (127,058) and its ceiling are unchanged,
+// and so is the per-tool ceiling: the compact manage_budget_months entry, which now carries the two
+// actions, is 3,895 bytes (its older text was tightened to make room).
+const EXPERIMENTAL_TOTAL_CEILING = 132595;
 // The ceiling for the compact tools COMBINED (what the `compact` surface lists; the design
 // record plans 15). The per-tool ceiling above applies to each compact entry unchanged. The
 // `all` surface lists both, so its budget is the sum of the two ceilings, never a third number.
