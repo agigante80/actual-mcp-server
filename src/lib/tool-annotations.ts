@@ -79,6 +79,7 @@ const READ_ONLY = new Set<string>([
   'actual_budgets_get_months',
   'actual_budgets_list_available',
   'actual_categories_get',
+  'actual_categories_get_automations',
   'actual_category_groups_get',
   'actual_entities_search',
   'actual_get_context',

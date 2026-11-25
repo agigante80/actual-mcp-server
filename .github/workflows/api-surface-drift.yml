@@ -81,6 +81,13 @@ jobs:
         continue-on-error: true
         run: node scripts/check-write-effect-audit.mjs
 
+      # #840: the experimental feature budget_automations (MCP_EXPERIMENTAL) rests on columns,
+      # note directives and a 0-place currency list read from the installed bundle. Same rule:
+      # the script exits 0 in every path, so a drift report can never break the pipeline.
+      - name: 🧪 Experimental surface canary (report only, never fails)
+        continue-on-error: true
+        run: node scripts/check-experimental-surface.mjs
+
   # ---------------------------------------------------------------------------
   # report: holds `issues: write`, and NEVER imports @actual-app/api or runs
   # `npm ci`. It consumes detect's JSON payload and nothing else.

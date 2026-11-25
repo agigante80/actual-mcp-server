@@ -507,6 +507,8 @@ withheld under `MCP_READ_ONLY=true`.
 
 #### Tool surface: MCP_TOOLSETS and MCP_READ_ONLY
 
+`MCP_EXPERIMENTAL` (#840) is a publication gate in the same family: a tool that depends on an upstream surface the `@actual-app/api` package does not promise to keep is registered but not published, and refused when called by name, until the operator names its feature. It is not an authorisation control: it says nothing about who may call a tool, and a tool it publishes is subject to the same authentication, per-user budget access and `MCP_READ_ONLY` as any other.
+
 `MCP_TOOLSETS`, `MCP_TOOLS` and `MCP_READ_ONLY` choose which tools the server publishes.
 A tool that is not published is both left out of `tools/list` and refused if called by
 name; the refusal names the setting responsible. The names below are the legacy `actual_*`

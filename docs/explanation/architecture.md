@@ -142,7 +142,7 @@ lock, so checking permissions preserves any budget another session has open.
 
 ### Tool Definitions
 
-85 tools organized by category:
+86 tools organized by category:
 
 ```
 src/tools/
@@ -196,6 +196,7 @@ src/tools/
 ├── budget_updates_batch.ts
 ├── preferences_get.ts                   # Preferences (#333)
 ├── categories_get.ts                   # Categories
+├── categories_get_automations.ts       # #840: experimental, published only with MCP_EXPERIMENTAL=budget_automations
 ├── categories_create.ts
 ├── categories_update.ts
 ├── categories_delete.ts
@@ -358,7 +359,7 @@ actual-mcp-server/
 │   │   ├── setup.ts              # OIDC/JWKS factory (AUTH_PROVIDER=oidc)
 │   │   └── budget-acl.ts         # Per-user budget ACL (email/sub/group)
 │   │
-│   ├── tools/                    # MCP tool definitions (85 tools + index.ts)
+│   ├── tools/                    # MCP tool definitions (86 tools + index.ts)
 │   │   ├── server_info.ts        # Server info
 │   │   ├── session_*.ts          # Session management
 │   │   ├── accounts_*.ts         # Accounts
@@ -390,7 +391,7 @@ actual-mcp-server/
 │   ├── e2e/                      # End-to-end tests (Playwright)
 │   │   ├── mcp-client.playwright.spec.ts  # Protocol compliance tests
 │   │   ├── docker.e2e.spec.ts             # Docker smoke tests
-│   │   ├── docker-all-tools.e2e.spec.ts   # All-tools Docker E2E (~80 named tests, all 85 tools)
+│   │   ├── docker-all-tools.e2e.spec.ts   # All-tools Docker E2E (~80 named tests, all 86 tools)
 │   │   ├── run-docker-e2e.sh              # Docker test orchestrator
 │   │   └── (#366: the suites/ tree was removed. It never executed, and every doc that
 │   │        named it now points at docker-all-tools.e2e.spec.ts instead)
@@ -452,7 +453,7 @@ actual-mcp-server/
 5. Tool Registry Initialization
    └─> src/actualToolsManager.ts loads all tools
    └─> Validates tool schemas
-   └─> Registers 85 tools (15 published on the default compact surface)
+   └─> Registers 86 tools (15 published on the default compact surface)
 
 6. MCP Connection Setup
    └─> Create ActualMCPConnection instance

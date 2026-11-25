@@ -22,7 +22,7 @@ import assert from 'assert';
 process.env.ACTUAL_SERVER_URL ??= 'http://127.0.0.1:5999';
 process.env.ACTUAL_PASSWORD ??= 'dummy';
 process.env.ACTUAL_BUDGET_SYNC_ID ??= '00000000-0000-0000-0000-000000000000';
-for (const k of ['MCP_TOOLSETS', 'MCP_TOOLS', 'MCP_READ_ONLY', 'MCP_TOOL_SURFACE']) delete process.env[k];
+for (const k of ['MCP_TOOLSETS', 'MCP_TOOLS', 'MCP_READ_ONLY', 'MCP_TOOL_SURFACE', 'MCP_EXPERIMENTAL']) delete process.env[k];
 
 let passed = 0;
 let failed = 0;
@@ -36,7 +36,7 @@ const { z } = await import('zod');
 const manager = (await import('../../dist/src/actualToolsManager.js')).default;
 const { COMPACT_TOOLS } = await import('../../dist/src/compact/registry.js');
 const { buildCompactTool, availableActions } = await import('../../dist/src/compact/dispatch.js');
-const { PRESETS, isOperationPublished, operationUnavailableError, readOnlyError } = await import('../../dist/src/lib/toolsets.js');
+const { PRESETS, isOperationPublished, operationUnavailableError, readOnlyError, EXPERIMENTAL } = await import('../../dist/src/lib/toolsets.js');
 const { ToolUnavailableError } = await import('../../dist/src/lib/errors.js');
 const { FULL_SURFACE } = await import('../../dist/src/compact/types.js');
 
@@ -228,14 +228,33 @@ await check('NEGATIVE: a published action whose default route is hidden says whi
   await open({ toolsets: 'chat' });
 });
 
-await check('default surface (toolsets all): every action is published and the text is the spec text, byte for byte', async () => {
+// #840: an action whose legacy tool is gated by MCP_EXPERIMENTAL is published only when its feature is
+// named, so the default surface is "every action except the gated ones" and the text is the spec text
+// built for that surface. The feature-on surface below is the full one.
+const gatedLegacy = new Set(Object.values(EXPERIMENTAL).flat());
+const isGatedAction = (spec, name) => gatedLegacy.has(spec.actions.get(name).legacy);
+const defaultActions = (s) => [...s.actions.keys()].filter((a) => !isGatedAction(s, a));
+const defaultSurface = (s) => ({ hasAction: (a) => !s.actions.has(a) || !isGatedAction(s, a), hasTool: () => true });
+
+await check('default surface (toolsets all): every ungated action is published and the text is the spec text for that surface, byte for byte', async () => {
   await open({ toolsets: 'all' });
+  for (const s of COMPACT_TOOLS) {
+    const expected = s.describeFor ? s.describeFor(defaultSurface(s)) : s.description;
+    assert.strictEqual(description(s.name), expected, `${s.name}: description`);
+    const values = selectorValues(s.name);
+    if (values) assert.deepStrictEqual(values, defaultActions(s), `${s.name}: selector`);
+  }
+  for (const s of COMPACT_TOOLS) assert.strictEqual(s.describeFor ? s.describeFor(FULL_SURFACE) : s.description, s.description);
+});
+
+await check('#840: with every experimental feature enabled every action is published and the text is the full spec text', async () => {
+  await open({ toolsets: 'all', experimental: Object.keys(EXPERIMENTAL).join(',') });
   for (const s of COMPACT_TOOLS) {
     assert.strictEqual(description(s.name), s.description, `${s.name}: description`);
     const values = selectorValues(s.name);
     if (values) assert.deepStrictEqual(values, [...s.actions.keys()], `${s.name}: selector`);
   }
-  for (const s of COMPACT_TOOLS) assert.strictEqual(s.describeFor ? s.describeFor(FULL_SURFACE) : s.description, s.description);
+  await open({ toolsets: 'all' });
 });
 
 await check('MCP_READ_ONLY=true: the readers keep every action and name only published siblings', async () => {

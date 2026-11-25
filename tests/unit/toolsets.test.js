@@ -38,7 +38,7 @@ process.env.ACTUAL_SERVER_URL ??= 'http://localhost:5006';
 process.env.ACTUAL_PASSWORD ??= 'dummy';
 process.env.ACTUAL_BUDGET_SYNC_ID ??= '00000000-0000-0000-0000-000000000000';
 // The suite must exercise the DEFAULT config for the "unset" cases, whatever the caller exported.
-for (const k of ['MCP_TOOLSETS', 'MCP_TOOLS', 'MCP_READ_ONLY', 'MCP_TOOL_SURFACE']) delete process.env[k];
+for (const k of ['MCP_TOOLSETS', 'MCP_TOOLS', 'MCP_READ_ONLY', 'MCP_TOOL_SURFACE', 'MCP_EXPERIMENTAL']) delete process.env[k];
 
 const read = (p) => readFileSync(join(ROOT, p), 'utf8');
 
@@ -62,6 +62,11 @@ const { z } = await import('zod');
 const ALL = { toolsets: 'all', tools: '', readOnly: false };
 await manager.initialize(ALL);
 const registered = manager.getToolNames();
+// #840: a tool gated by MCP_EXPERIMENTAL is registered but, with the feature unnamed, not published.
+// "Unset config publishes the registry unchanged" therefore means: the registry minus the gated tools.
+const { EXPERIMENTAL } = await import('../../dist/src/lib/toolsets.js');
+const gated = new Set(Object.values(EXPERIMENTAL).flat());
+const publishedByDefault = registered.filter((n) => !gated.has(n));
 
 const implementedSrc = read('src/actualToolsManager.ts');
 const implemented = [...implementedSrc.slice(0, implementedSrc.indexOf('];')).matchAll(/'(actual_[A-Za-z0-9_]+)'/g)].map((m) => m[1]);
@@ -112,8 +117,8 @@ await check('NEGATIVE: a preset naming an unregistered tool fails the resolver, 
 
 await check('unset config publishes the registry unchanged: same names, same order, same list entries', () => {
   const policy = resolve({});
-  assert.deepStrictEqual([...policy.published], registered);
-  assert.strictEqual(policy.hidden.size, 0);
+  assert.deepStrictEqual([...policy.published], publishedByDefault);
+  assert.deepStrictEqual([...policy.hidden.keys()].sort(), [...gated].sort());
   const entryFor = (name) => {
     const tool = manager.getTool(name);
     return () => ({
@@ -123,13 +128,13 @@ await check('unset config publishes the registry unchanged: same names, same ord
   };
   assert.deepStrictEqual(
     JSON.stringify(buildToolListEntries([...policy.published], (n) => entryFor(n)())),
-    JSON.stringify(buildToolListEntries(registered, (n) => entryFor(n)())),
+    JSON.stringify(buildToolListEntries(publishedByDefault, (n) => entryFor(n)())),
   );
 });
 
 await check('an empty MCP_TOOLSETS means all', () => {
-  assert.deepStrictEqual(publishedOf({ toolsets: '' }), registered);
-  assert.deepStrictEqual(publishedOf({ toolsets: '  ' }), registered);
+  assert.deepStrictEqual(publishedOf({ toolsets: '' }), publishedByDefault);
+  assert.deepStrictEqual(publishedOf({ toolsets: '  ' }), publishedByDefault);
 });
 
 // ---------------------------------------------------------------- selection
@@ -167,7 +172,7 @@ await check('NEGATIVE: MCP_TOOLS needs the full registered name (no silent prefi
 await check('MCP_READ_ONLY with all publishes no write-capable tool, and every other tool', () => {
   const got = publishedOf({ readOnly: true });
   assert.deepStrictEqual(got.filter((n) => WRITE_CAPABLE.has(n)), []);
-  sameSet(got, registered.filter((n) => !WRITE_CAPABLE.has(n)));
+  sameSet(got, publishedByDefault.filter((n) => !WRITE_CAPABLE.has(n)));
 });
 
 await check('read-only overrides MCP_TOOLS: a writer named there stays unpublished', () => {

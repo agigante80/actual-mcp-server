@@ -2,7 +2,7 @@ import { showDiscoveredBudgets } from '../../lib/budgetSelector.js';
 import { z } from 'zod';
 import { SCHEDULE_DATES_CAP } from '../../lib/constants.js';
 import { CommonSchemas } from '../../lib/schemas/common.js';
-import type { CompactActionRow, CompactRoute, CompactToolSpec } from '../types.js';
+import { FULL_SURFACE, type CompactActionRow, type CompactRoute, type CompactToolSpec, type DescriptionContext } from '../types.js';
 
 /**
  * list_entities (#672): the compact front for the sixteen list, lookup and search tools.
@@ -35,6 +35,9 @@ const start = CommonSchemas.date.describe('First date, YYYY-MM-DD (default today
 const end = CommonSchemas.date.describe('Last date, YYYY-MM-DD, inclusive. Needs schedule_id.');
 const count = z.number().int().min(1).max(SCHEDULE_DATES_CAP).describe(`How many dates to return, 1 to ${SCHEDULE_DATES_CAP}. Needs schedule_id.`);
 const id = z.string().min(1).describe('Required for type note: an account, category, category group or payee UUID, or budget-YYYY-MM.');
+// Only the experimental category_automations row uses this field (feature budget_automations), so it is
+// dropped from the published schema whenever that action is narrowed away.
+const categoryId = z.string().min(1).describe('UUID.');
 const scope = z
   .enum(['configured', 'server'])
   .describe('For budget_file only. configured (default): ' +
@@ -64,23 +67,44 @@ const nameRoute = (plural: string): CompactRoute => ({
 
 const row = (legacy: string, routes?: readonly CompactRoute[]): CompactActionRow => ({ legacy, fields: none, ...(routes ? { routes } : {}) });
 
+/**
+ * The description for the actions a process offers. With the experimental feature off (the default)
+ * `category_automations` is not named and the text is byte-identical to the one before that action existed.
+ * With it on, three lines are shortened: this entry sits at the 3,900 byte per-tool ceiling by default, so
+ * the new action pays for itself (tests/unit/tools_list_size_budget.test.js measures the feature-on run).
+ */
+function describe(ctx: DescriptionContext): string {
+  const automations = ctx.hasAction('category_automations');
+  return (
+    'List, search or look up budget entities of one `type`: account, account_group, category, category_group, payee, tag, rule, schedule, note' +
+    (automations ? ', category_automations' : '') +
+    ' or budget_file. For the whole budget structure, server details or preferences in one call use get_context instead.\n' +
+    (automations
+      ? 'With only type it lists every entity. A field the type does not take is refused.\n'
+      : 'With only type it lists every entity of that type. A field the type does not take is refused naming the field.\n') +
+    'account, category, payee: query (string or array) with match_type and limit to search by name, or name to resolve one exact name to its id, refused with the candidate ids when several share it.\n' +
+    (automations
+      ? 'payee: also sort frequency (the 10 most used payees of the last 12 weeks).\n'
+      : 'payee: also sort frequency (the 10 most used payees of the last 12 weeks; a transfer payee can appear, with transfer_acct null).\n') +
+    'schedule: name to resolve its id, or schedule_id with start, end and count (default and maximum 366) to list the dates it falls on.\n' +
+    'rule: payee_id to list that payee\'s rules.\n' +
+    (automations
+      ? 'tag: the tag list.\nnote: requires id.\n'
+      : 'tag: the tag list (colour, description); tags used only in notes are not listed.\nnote: requires id (an entity UUID or budget-YYYY-MM).\n') +
+    (automations ? 'category_automations (experimental): requires category_id.\n' : '') +
+    'budget_file: scope configured (default; active true marks this session\'s budget) or server.\n' +
+    'query and name are mutually exclusive, as are schedule_id and name; match_type and limit need query; start, end and count need schedule_id; sort allows no other field.\n' +
+    'Returns the list for the type; a query returns { matches, count, total, truncated }, a name returns the id, a schedule_id returns { schedule_id, name, dates, count, truncated }, and a note returns { found, id, note }.'
+  );
+}
+
 export const listEntities: CompactToolSpec = {
   name: 'list_entities',
   domain: 'Context and lookup',
   summary: 'List or look up accounts, categories, payees, rules, schedules, tags, notes or budget files, and resolve a name to an id.',
   examplePrompt: 'List my payees whose name contains Market.',
-  description:
-    'List, search or look up budget entities of one `type`: account, account_group, category, category_group, payee, tag, rule, schedule, note or budget_file. For the whole budget structure, server details or preferences in one call use get_context instead.\n' +
-    'With only type it lists every entity of that type. A field the type does not take is refused naming the field.\n' +
-    'account, category, payee: query (string or array) with match_type and limit to search by name, or name to resolve one exact name to its id, refused with the candidate ids when several share it.\n' +
-    'payee: also sort frequency (the 10 most used payees of the last 12 weeks; a transfer payee can appear, with transfer_acct null).\n' +
-    'schedule: name to resolve its id, or schedule_id with start, end and count (default and maximum 366) to list the dates it falls on.\n' +
-    'rule: payee_id to list that payee\'s rules.\n' +
-    'tag: the tag list (colour, description); tags used only in notes are not listed.\n' +
-    'note: requires id (an entity UUID or budget-YYYY-MM).\n' +
-    'budget_file: scope configured (default; active true marks this session\'s budget) or server.\n' +
-    'query and name are mutually exclusive, as are schedule_id and name; match_type and limit need query; start, end and count need schedule_id; sort allows no other field.\n' +
-    'Returns the list for the type; a query returns { matches, count, total, truncated }, a name returns the id, a schedule_id returns { schedule_id, name, dates, count, truncated }, and a note returns { found, id, note }.',
+  description: describe(FULL_SURFACE),
+  describeFor: describe,
   selector: 'type',
   actions: new Map<string, CompactActionRow>([
     ['account', row('actual_accounts_list', [searchRoute('accounts'), nameRoute('accounts')])],
@@ -104,5 +128,7 @@ export const listEntities: CompactToolSpec = {
     ['budget_file', { legacy: 'actual_budgets_list_available', fields: scopeFields, drop: ['scope'], routes: [
       { triggers: ['scope'], when: (call) => call.scope === 'server', triggerValue: 'server', phrase: 'scope server', legacy: 'actual_budgets_get_all', fields: scopeFields, drop: ['scope'] },
     ] }],
+    // LAST, so the default (feature off) narrowed surface stays byte-identical: experimental feature budget_automations.
+    ['category_automations', { legacy: 'actual_categories_get_automations', fields: z.object({ category_id: categoryId }), rename: { category_id: 'categoryId' } }],
   ]),
 };

@@ -204,14 +204,22 @@ await check('4b: a returned top-level error string is rewritten to the route phr
   assert.ok(!/actual_/.test(r.error) && /list_entities with type and query/.test(r.error), r.error);
 });
 
+// #840: spec.description is the FULL surface, which with the experimental feature on shortens three
+// lines to pay for category_automations. The clauses below are asserted on the DEFAULT surface, the
+// text a server with MCP_EXPERIMENTAL unset publishes.
+const defaultDescription = spec.describeFor({ hasAction: (a) => a !== 'category_automations', hasTool: () => true });
+await check('#840: the default description does not name the experimental action, the full one does', () => {
+  assert.ok(!defaultDescription.includes('category_automations'));
+  assert.ok(spec.description.includes('category_automations (experimental): requires category_id.'));
+});
 await check('#702: the description says tags used only in notes are not listed', () => {
-  assert.ok(spec.description.includes('only in notes are not listed'));
+  assert.ok(defaultDescription.includes('only in notes are not listed'));
 });
 await check('#801: the description says a shared name is refused with the candidate ids', () => {
   assert.ok(spec.description.includes('refused with the candidate ids when several share it'));
 });
 await check('#758: payee frequency and the schedule count cap are documented', () => {
-  const d = spec.description;
+  const d = defaultDescription;
   assert.ok(d.includes('the 10 most used payees of the last 12 weeks') && d.includes('transfer_acct null'), 'frequency sort');
   assert.ok(d.includes('count (default and maximum 366)'), 'schedule count cap');
   assert.ok(!d.includes('sort frequency (most used payees).'), 'the bare frequency clause is gone');

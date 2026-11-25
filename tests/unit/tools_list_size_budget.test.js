@@ -16,7 +16,7 @@ import assert from 'assert';
 process.env.ACTUAL_SERVER_URL ??= 'http://localhost:5006';
 process.env.ACTUAL_PASSWORD ??= 'dummy';
 process.env.ACTUAL_BUDGET_SYNC_ID ??= '00000000-0000-0000-0000-000000000000';
-for (const k of ['MCP_TOOLSETS', 'MCP_TOOLS', 'MCP_READ_ONLY', 'MCP_TOOL_SURFACE']) delete process.env[k];
+for (const k of ['MCP_TOOLSETS', 'MCP_TOOLS', 'MCP_READ_ONLY', 'MCP_TOOL_SURFACE', 'MCP_EXPERIMENTAL']) delete process.env[k];
 
 // Raising either ceiling is a deliberate edit. Change the number AND replace the reason below
 // in the same commit; a reviewer should be able to see why the list got heavier.
@@ -121,6 +121,11 @@ for (const k of ['MCP_TOOLSETS', 'MCP_TOOLS', 'MCP_READ_ONLY', 'MCP_TOOL_SURFACE
 //   Every per-tool ceiling is unchanged.
 const TOTAL_CEILING = 127066;
 const PER_TOOL_CEILING = 3900;
+// #840: the legacy ceiling WITH the experimental feature budget_automations enabled. The default
+// list is unchanged (TOTAL_CEILING above is not raised); enabling the feature adds one tool,
+// actual_categories_get_automations. Measured with the feature on: 86 tools, 128,406 bytes
+// (127,058 default), heaviest entry 3,893 bytes; the ceiling is that plus 8.
+const EXPERIMENTAL_TOTAL_CEILING = 128414;
 // The ceiling for the compact tools COMBINED (what the `compact` surface lists; the design
 // record plans 15). The per-tool ceiling above applies to each compact entry unchanged. The
 // `all` surface lists both, so its budget is the sum of the two ceilings, never a third number.
@@ -182,10 +187,15 @@ const entries = buildToolListEntries(names, (name) => {
 const realTotal = sizeOf(entries);
 console.log(`  measured: total ${realTotal} bytes, heaviest ${Math.max(...entries.map(sizeOf))} bytes`);
 
-await check('the measured list is the full registry (published === registered === IMPLEMENTED_TOOLS)', () => {
+const { EXPERIMENTAL } = await import('../../dist/src/lib/toolsets.js');
+const gatedTools = Object.values(EXPERIMENTAL).flat();
+
+await check('the measured list is the registry minus the experimental tools (published === registered - gated === IMPLEMENTED_TOOLS - gated)', () => {
   const canonical = getCanonicalCount();
-  const counts = `published ${names.length}, registered ${registered.length}, IMPLEMENTED_TOOLS ${canonical}`;
-  assert.ok(names.length === canonical && registered.length === canonical, counts);
+  const counts = `published ${names.length}, registered ${registered.length}, IMPLEMENTED_TOOLS ${canonical}, gated ${gatedTools.length}`;
+  assert.ok(registered.length === canonical, counts);
+  assert.ok(names.length === canonical - gatedTools.length, counts);
+  assert.ok(gatedTools.every((t) => !names.includes(t)), counts);
   assert.strictEqual(entries.length, names.length, counts);
 });
 
@@ -215,6 +225,20 @@ await check('a total ceiling 1 byte under the real total fails, naming the total
 
 await check('a total ceiling exactly at the real total passes', () => {
   assert.deepStrictEqual(checkBudget(entries, realTotal, Number.MAX_SAFE_INTEGER), []);
+});
+
+await check('#840: with every experimental feature enabled the legacy list is the full registry and within its own ceiling', async () => {
+  await manager.initialize({ toolsets: 'all', tools: '', readOnly: false, experimental: Object.keys(EXPERIMENTAL).join(',') });
+  const onNames = manager.getPublishedToolNames();
+  assert.strictEqual(onNames.length, getCanonicalCount(), `published ${onNames.length}`);
+  const onEntries = buildToolListEntries(onNames, (name) => {
+    const tool = manager.getTool(name);
+    return { description: tool.description, schema: tool.inputSchema ? z.toJSONSchema(tool.inputSchema) : undefined, outputSchema: outputJsonSchema(tool) };
+  });
+  console.log(`  measured: feature on ${onEntries.length} tools, ${sizeOf(onEntries)} bytes, heaviest ${Math.max(...onEntries.map(sizeOf))} bytes`);
+  assert.deepStrictEqual(checkBudget(onEntries, EXPERIMENTAL_TOTAL_CEILING, PER_TOOL_CEILING), []);
+  assert.ok(sizeOf(onEntries) > TOTAL_CEILING, 'the feature-on list must exceed the default ceiling, else the gate hid nothing');
+  await manager.initialize({ toolsets: 'all', tools: '', readOnly: false });
 });
 
 // ---- #671: the compact surface and the `all` surface ----

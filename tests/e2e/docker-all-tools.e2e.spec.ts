@@ -5102,6 +5102,31 @@ test.describe('Docker E2E - compact manage_categories (#676)', () => {
     expect((await mcp.call('list_entities', { type: 'note', id: category.id }))?.note).toBe('cat-note-676');
   });
 
+  // #840: experimental feature budget_automations. Published only when MCP_EXPERIMENTAL names it
+  // (tests/e2e/compose.yaml does), so the rows skip on a server that does not publish the action.
+  test('list_entities category_automations - a note-managed category returns its directive lines (#840)', async ({ mcp, makeCategory, cleanup }) => {
+    const entity = (await mcp.listTools()).find((t: any) => t.name === 'list_entities');
+    test.skip(!entity?.inputSchema?.properties?.type?.enum?.includes('category_automations'), 'budget_automations is not enabled on this server');
+    const category = await makeCategory();
+    cleanup.add(CLEANUP_ORDER.note, `note ${category.id}`, async () => {
+      await mcp.call('manage_categories', { action: 'set_note', id: category.id, note: '' }).catch(() => undefined);
+    });
+    await mcp.call('manage_categories', { action: 'set_note', id: category.id, note: 'Rent\npay #template 50' });
+    const data = await mcp.call('list_entities', { type: 'category_automations', category_id: category.id });
+    expect(data?.source).toBe('notes');
+    expect(data?.noteDirectives).toEqual(['#template 50']);
+    await mcp.call('manage_categories', { action: 'set_note', id: category.id, note: '' });
+    const cleared = await mcp.call('list_entities', { type: 'category_automations', category_id: category.id });
+    expect(cleared?.noteDirectives).toEqual([]);
+  });
+
+  test('list_entities category_automations - ERROR: an unknown id and a missing category_id are refused (#840)', async ({ mcp }) => {
+    const entity = (await mcp.listTools()).find((t: any) => t.name === 'list_entities');
+    test.skip(!entity?.inputSchema?.properties?.type?.enum?.includes('category_automations'), 'budget_automations is not enabled on this server');
+    expect(await refusal(() => mcp.call('list_entities', { type: 'category_automations', category_id: '00000000-0000-4000-8000-000000000000' }))).toMatch(/not found/i);
+    expect(await refusal(() => mcp.call('list_entities', { type: 'category_automations' }))).toMatch(/category_id/);
+  });
+
   test('manage_categories - ERROR: missing entity, missing group_id, hidden on a category and an empty update', async ({ mcp }) => {
     const id = '00000000-0000-4000-8000-000000000000';
     expect(await refusal(() => mcp.call('manage_categories', { action: 'create', name: 'x' }))).toMatch(/entity/);
@@ -6630,6 +6655,21 @@ test.describe('legacy smoke (MCP_TOOL_SURFACE=all)', () => {
     const data = await mcp.call('actual_notes_get', { id: 'budget-1970-01' });
     expect(typeof data?.found).toBe('boolean');
     expect(typeof data?.id).toBe('string');
+  });
+
+  // #840: the legacy tool behind list_entities category_automations; published only with MCP_EXPERIMENTAL.
+  test('actual_categories_get_automations - reads a note-managed category and refuses an unknown id (#840)', async ({ mcp, makeCategory, cleanup }) => {
+    const names = (await mcp.listTools()).map((t: any) => t.name);
+    test.skip(!names.includes('actual_categories_get_automations'), 'budget_automations is not enabled on this server');
+    const category = await makeCategory();
+    cleanup.add(CLEANUP_ORDER.note, `note ${category.id}`, async () => {
+      await mcp.call('manage_categories', { action: 'set_note', id: category.id, note: '' }).catch(() => undefined);
+    });
+    await mcp.call('manage_categories', { action: 'set_note', id: category.id, note: '#template 50' });
+    const data = await mcp.call('actual_categories_get_automations', { categoryId: category.id });
+    expect(data?.source).toBe('notes');
+    expect(data?.noteDirectives).toEqual(['#template 50']);
+    expect(await refusal(() => mcp.call('actual_categories_get_automations', { categoryId: '00000000-0000-4000-8000-000000000000' }))).toMatch(/not found/i);
   });
 
   test('actual_entities_search - finds a seeded payee and returns nothing for a nonsense query', async ({ mcp, makePayee }) => {

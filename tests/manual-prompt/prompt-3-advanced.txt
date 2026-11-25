@@ -18,7 +18,7 @@ WHAT IT TESTS
   Phase 7:   Transaction Summaries   (5 operations)
   Phase 8:   Budgets                 (11 operations)
   Phase 9:   Advanced Query & Sync   (2 operations)
-  Phase 9b: Notes                   (2 operations)
+  Phase 9b: Notes                   (3 operations)
   Phase 9c: Preferences              (1 operation)
   Phase 9d: Export / Import          (2 operations)
   Phase 10:  Session Management      (2 operations, legacy or all surface only)
@@ -184,7 +184,7 @@ Select a second different category for the transfer test. Save as `{budget_cat2_
 
 ---
 
-**Phase 9b: Notes (2 operations):**
+**Phase 9b: Notes (3 operations):**
 
 - manage_budget_months, action: "set_note"
   Input: { action: "set_note", month: "2026-01", note: "#template 250 MCP-Notes-{TS}" }
@@ -199,6 +199,17 @@ Select a second different category for the transfer test. Save as `{budget_cat2_
   Then call manage_budget_months, action: "set_note" with note="" to clear (cleanup)
   Negative: call with { type: "note", id: "budget-1970-01" } (very old month, likely no note)
     Expect: found=false with a clear message (no error thrown)
+
+- list_entities, type: "category_automations" (EXPERIMENTAL: published only when the server sets
+  MCP_EXPERIMENTAL=budget_automations; when the type is not in the list_entities enum, report this
+  operation as skipped, which is neither a pass nor a failure, and do not count it)
+  Setup: create a disposable category MCP-AutoCat-{TS} (manage_categories, entity category), then
+    manage_categories, action: "set_note" with id of that category and note: "Rent\npay #template 50"
+  Input: { type: "category_automations", category_id: "{auto_cat_id}" }
+  Positive: expect source="notes" and noteDirectives equal to ["#template 50"]
+  Negative: call with category_id="00000000-0000-4000-8000-000000000000"
+    Expect: a refusal saying the category was not found (an error, not a success-shaped answer)
+  Cleanup: delete the disposable category
 
 ---
 
@@ -319,14 +330,14 @@ PROMPT 3 (Advanced):
   Phase 7  Transaction Summaries:     X / 5
   Phase 8  Budgets:                   X / 11
   Phase 9  Query & Sync:              X / 2
-  Phase 9b Notes:                      X / 2
+  Phase 9b Notes:                      X / 3
   Phase 9c Preferences:                X / 1
   Phase 9d Export / Import:            X / 2
   Phase 10 Session Management:        X / 2
   Phase 11 Concurrency:               Skipped / Ran (X/10)
 
 ─────────────────────────────────────────────
-  Total Tools Tested:   X / 85
+  Total Tools Tested:   X / 86
   Passed (✓):           X
   Failed (✗):           X
   Informational (ℹ):    X
