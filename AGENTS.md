@@ -82,6 +82,7 @@ A change that alters behaviour described in a doc updates that doc in the same p
 ## Contributing a change
 
 - Target the **`develop`** branch. `main` only moves in a release.
+- Please open an issue first for a new tool or a new config variable, so the design can be agreed before you write the code. Small fixes can come straight as a pull request.
 - An external PR may be reimplemented on `develop` by the maintainer and closed as superseded rather than merged; the author is kept as co-author on the commit and credited in the release notes.
 - Commit messages follow [Conventional Commits](https://www.conventionalcommits.org/) and reference the issue: `feat(tools): add actual_x_y (#123)`.
 - Tickets follow [docs/development/ticket-standards.md](docs/development/ticket-standards.md).
