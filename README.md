@@ -180,7 +180,7 @@ Amounts are integer cents and dates are `YYYY-MM-DD` strings. Each tool takes an
 
 ### Reducing the tool surface
 
-By default the server serves 15 tools over 88 operations (the compact surface, `MCP_TOOL_SURFACE=compact`). Set `MCP_TOOL_SURFACE=legacy` to publish the 85 `actual_*` tools instead; the toolset names and counts in the table below are operations, and a compact tool is listed when at least one operation behind it is selected. A call to an operation a toolset leaves out is refused naming `MCP_TOOLSETS`. A tool that is not published is also refused if a client calls it by name. One experimental operation needs `MCP_EXPERIMENTAL=budget_automations`.
+By default the server serves 15 tools over 88 operations (the compact surface, `MCP_TOOL_SURFACE=compact`). Set `MCP_TOOL_SURFACE=legacy` to publish the 85 `actual_*` tools instead; the toolset names and counts in the table below are operations, and a compact tool is listed when at least one operation behind it is selected. A call to an operation a toolset leaves out is refused naming `MCP_TOOLSETS`. A tool that is not published is also refused if a client calls it by name. Three experimental operations need `MCP_EXPERIMENTAL=budget_automations`.
 
 <!-- BEGIN GENERATED: tools-summary -->
 <!-- Generated from dist/src/lib/toolsets.js by `npm run docs:gen`. Do not edit. -->

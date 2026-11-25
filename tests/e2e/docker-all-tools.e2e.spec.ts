@@ -121,8 +121,9 @@ test.describe('Docker E2E - tool surface', () => {
     expect(ann('list_entities')?.readOnlyHint).toBe(true);
     expect(ann('manage_accounts')?.readOnlyHint).toBe(false);
     expect(ann('manage_accounts')?.destructiveHint).toBe(true);
-    // manage_budget_months only sets fields in place, so it is additive, not destructive.
-    expect(ann('manage_budget_months')?.destructiveHint).toBe(false);
+    // #841: apply_templates and run_cleanup overwrite budgeted amounts with no undo, so the tool is
+    // destructive as a whole, with the experimental feature on or off (the hint is static).
+    expect(ann('manage_budget_months')?.destructiveHint).toBe(true);
 
     // The default this server corrects 73 times out of 74: the spec defaults openWorldHint
     // to TRUE, and this server's domain is one Actual instance. Only bank sync, and
