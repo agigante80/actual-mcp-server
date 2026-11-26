@@ -270,7 +270,7 @@ Every variable, with its type and default: [configuration reference](docs/refere
 ## Documentation
 
 - [Documentation index](docs/README.md): every page.
-- [Connect a client](docs/guides/clients/README.md), [deployment](docs/guides/deployment.md), [authentication](docs/guides/authentication.md), [upgrading](docs/guides/upgrading.md), [troubleshooting](docs/guides/troubleshooting.md).
+- [Troubleshooting](docs/guides/troubleshooting.md). Client setup, deployment, authentication and upgrading are linked in their sections above.
 - [Architecture](docs/explanation/architecture.md), [testing and reliability](docs/development/testing-and-reliability.md).
 
 ## Contributing
