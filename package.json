@@ -90,7 +90,7 @@
     "@playwright/test": "^1.65.1",
     "@types/express": "^5.0.3",
     "@types/node": "^26.6.5",
-    "knip": "^6.47.0",
+    "knip": "^6.48.0",
     "node-fetch": "^3.3.2",
     "tsconfig-paths": "^4.2.0",
     "typescript": "^7.0.2",
