@@ -47,7 +47,7 @@ reviews:
   # (knowledge_base.code_guidelines), and tests/unit/contributor_docs.test.js keeps
   # those true. A copy of the rules here would be a second source nothing checks.
   # Nothing here may push a commit or a branch into the repository: a pushed branch
-  # runs workflows from that branch. All five are ON by schema default.
+  # runs workflows from that branch. Four are ON by schema default (simplify is off).
   finishing_touches:
     unit_tests:
       enabled: false
@@ -59,6 +59,11 @@ reviews:
       enabled: false
     simplify:
       enabled: false
+    # No custom recipes: each one is an agent run that can change the pull request branch.
+    custom: []
+  # No agent run after a merge either. Both lists are empty by schema default; they are
+  # written out so tests/unit/coderabbit_config.test.js can pin them.
+  post_merge_actions: []
   # The app never approves a pull request, and no author can ask it to.
   auto_approvals:
     enabled: false

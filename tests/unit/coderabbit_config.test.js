@@ -6,8 +6,13 @@
 // would break a project rule if the line were dropped: only the default branch is reviewed
 // without base_branches, bot pull requests are reviewed without ignore_usernames, and issue
 // planning is ON by default (ticket comments here are messages between people only), and
-// five finishing touches that can PUSH a commit or a branch into the repository are ON by
-// default (a pushed branch runs workflows from that branch).
+// four of the five finishing touches that can PUSH a commit or a branch into the repository
+// are ON by default (a pushed branch runs workflows from that branch; simplify is off by
+// default and pinned off with the rest).
+// #849: two list keys are EMPTY by schema default and pinned empty anyway, because an entry
+// in either makes the app run an agent with our instructions: reviews.finishing_touches.custom
+// (recipes that can change the pull request branch) and reviews.post_merge_actions. Absent
+// counts as a failure, so the pin cannot be dropped silently.
 //
 // Run: node tests/unit/coderabbit_config.test.js
 
@@ -61,6 +66,15 @@ export function checkConfig(cfg) {
     if (cfg?.reviews?.finishing_touches?.[touch]?.enabled !== false) {
       fail(`reviews.finishing_touches.${touch}.enabled must be false`);
     }
+  }
+  // #849: after the loop above on purpose, so a dropped finishing_touches object keeps
+  // reporting the first touch.
+  const emptyList = (v) => Array.isArray(v) && v.length === 0;
+  if (!emptyList(cfg?.reviews?.finishing_touches?.custom)) {
+    fail('reviews.finishing_touches.custom must be an empty list');
+  }
+  if (!emptyList(cfg?.reviews?.post_merge_actions)) {
+    fail('reviews.post_merge_actions must be an empty list');
   }
   if (cfg?.reviews?.auto_approvals?.enabled !== false) fail('reviews.auto_approvals.enabled must be false');
   if (cfg?.reviews?.auto_approvals?.allow_author_approval !== false) {
@@ -156,6 +170,14 @@ refuses('a finishing touch that pushes commits', (c) => { c.reviews.finishing_to
   'coderabbit config: reviews.finishing_touches.autofix.enabled must be false');
 refuses('finishing touches dropped (schema default is on)', (c) => { delete c.reviews.finishing_touches; },
   'coderabbit config: reviews.finishing_touches.unit_tests.enabled must be false');
+refuses('a custom finishing touch recipe', (c) => { c.reviews.finishing_touches.custom.push({ name: 'x', instructions: 'x' }); },
+  'coderabbit config: reviews.finishing_touches.custom must be an empty list');
+refuses('the custom recipes pin dropped', (c) => { delete c.reviews.finishing_touches.custom; },
+  'coderabbit config: reviews.finishing_touches.custom must be an empty list');
+refuses('a post-merge action', (c) => { c.reviews.post_merge_actions.push({ name: 'x', prompt: 'x' }); },
+  'coderabbit config: reviews.post_merge_actions must be an empty list');
+refuses('the post-merge actions pin dropped', (c) => { delete c.reviews.post_merge_actions; },
+  'coderabbit config: reviews.post_merge_actions must be an empty list');
 refuses('author approval allowed', (c) => { c.reviews.auto_approvals.allow_author_approval = true; },
   'coderabbit config: reviews.auto_approvals.allow_author_approval must be false');
 refuses('guideline reading switched off', (c) => { c.knowledge_base.code_guidelines.enabled = false; },

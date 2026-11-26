@@ -565,7 +565,9 @@ narrows its behaviour, and `tests/unit/coderabbit_config.test.js` pins that narr
 
 - **No pushes.** Every finishing touch that commits or opens a branch (`unit_tests`, `autofix`,
   `fix_ci`, `resolve_merge_conflict`) is off. They are on by schema default, and a branch
-  pushed into the repository runs workflows from that branch.
+  pushed into the repository runs workflows from that branch. `simplify` (off by default) is
+  pinned off too, and the two lists that would make the app run an agent with instructions of
+  ours, `finishing_touches.custom` and `post_merge_actions`, are pinned empty.
 - **No approvals, no failing status.** `auto_approvals` is off, an author cannot ask for an
   approval, and `fail_commit_status` is false. A finding is input for the maintainer, never an
   authorisation decision.
