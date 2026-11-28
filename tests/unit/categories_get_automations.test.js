@@ -36,7 +36,10 @@ let category = null;       // the categories row for CAT, or null
 let currency;              // defaultCurrencyCode preference
 let note = null;           // the category note text
 const groups = [{ id: 'g1', name: 'Bills' }];
-const calls = { queries: [], getNote: 0, getPreferences: 0, writes: 0 };
+const SCHED = '70000000-0000-4000-8000-000000000001';
+// #847: the live schedules the marker checks against; a live "Rent" keeps the #840 cases unmarked.
+let schedules = [{ id: SCHED, name: 'Rent', tombstone: false }];
+const calls = { queries: [], getNote: 0, getPreferences: 0, getSchedules: 0, writes: 0 };
 const countWrite = (name) => async () => { calls.writes++; throw new Error(`unexpected write: ${name}`); };
 
 apiDefault.sync = async () => {};
@@ -53,6 +56,7 @@ apiDefault.runQuery = async (query) => {
 };
 apiDefault.getPreferences = async () => { calls.getPreferences++; return currency === undefined ? {} : { defaultCurrencyCode: currency }; };
 apiDefault.getNote = async () => { calls.getNote++; return note === null ? null : { id: CAT, note }; };
+apiDefault.getSchedules = async () => { calls.getSchedules++; return schedules; };
 // The internal handler bus cannot be stubbed: `api.internal` is a non-configurable getter that is
 // null until init, which this harness skips. So a read that reached `api.internal.send` would throw a
 // TypeError and fail every value assertion below; no separate counter is kept for it.
@@ -67,7 +71,7 @@ const { NotFoundRefusal, isPreflightRefusal } = await import('../../dist/src/lib
 
 const ui = (goal, extra = {}) => ({ id: CAT, template_settings: JSON.stringify({ source: 'ui' }), goal_def: JSON.stringify(goal), cleanup_def: null, ...extra });
 const run = async (id = CAT) => {
-  calls.queries = []; calls.getNote = 0; calls.getPreferences = 0; calls.writes = 0;
+  calls.queries = []; calls.getNote = 0; calls.getPreferences = 0; calls.getSchedules = 0; calls.writes = 0;
   try { return { value: await adapter.getCategoryAutomations(id) }; } catch (err) { return { error: err }; }
 };
 const pure = (label) => check(calls.writes === 0, `${label}: no write`, JSON.stringify(calls));
@@ -98,6 +102,53 @@ console.log('\n[#840] editor-managed categories: amounts become integer minor un
   same(r.value.automations.map((a) => a.amount ?? null), [50000, null], 'limit 500 gives 50000');
   same(r.value.automations[1], { type: 'refill', weight: 1 }, 'refill is unchanged');
   pure('limit and refill');
+}
+
+console.log('\n[#847] a schedule entry Actual can no longer resolve carries scheduleMissing');
+{
+  currency = 'USD';
+  const entry = (fields) => { category = ui([{ type: 'schedule', directive: 'template', priority: 0, ...fields }]); };
+  const marked = async (label, expected) => {
+    const r = await run();
+    const got = r.value?.automations?.[0];
+    if (expected) same(got?.scheduleMissing, true, `${label}: scheduleMissing true`);
+    else check(got !== undefined && !('scheduleMissing' in got), `${label}: no scheduleMissing key`, JSON.stringify(got));
+    pure(label);
+    return r;
+  };
+
+  schedules = [{ id: SCHED, name: 'Rent 2027', tombstone: false }];
+  entry({ scheduleId: SCHED, name: 'Rent' });
+  await marked('id live after a rename', false);
+  check(calls.getSchedules === 1, 'the schedules are read once per read', JSON.stringify(calls));
+
+  schedules = [];
+  await marked('id gone', true);
+  schedules = [{ id: SCHED, name: 'Rent', tombstone: true }];
+  await marked('id only on a deleted schedule', true);
+  schedules = [{ id: SCHED, name: null, tombstone: false }];
+  await marked('id on a schedule with no name (upstream skips it)', true);
+
+  schedules = [{ id: SCHED, name: 'Rent 2027', tombstone: false }];
+  entry({ name: 'Rent' });
+  const r = await marked('name only, renamed', true);
+  same(r.value.automations[0], { type: 'schedule', directive: 'template', priority: 0, name: 'Rent', scheduleMissing: true }, 'the marked entry is otherwise as stored');
+  schedules = [{ id: SCHED, name: '', tombstone: false }];
+  await marked('name only, the schedule name emptied', true);
+  schedules = [{ id: SCHED, name: 'Rent ', tombstone: false }];
+  await marked('"Rent " on the schedule matches a stored "Rent"', false);
+  schedules = [{ id: SCHED, name: 'Rent', tombstone: false }];
+  entry({ name: 'Rent ' });
+  await marked('a stored "Rent " is marked: upstream looks it up untrimmed', true);
+  entry({ name: 'Rent' });
+  schedules = [{ id: SCHED, name: 'rent', tombstone: false }];
+  await marked('"rent" does not match "Rent" (case sensitive)', true);
+
+  schedules = [];
+  category = ui([{ type: 'periodic', amount: 1, period: { period: 'month', amount: 1 } }]);
+  await run();
+  check(calls.getSchedules === 0, 'no schedule entry: the schedules are never read', JSON.stringify(calls));
+  schedules = [{ id: SCHED, name: 'Rent', tombstone: false }];
 }
 
 console.log('\n[#840] cleanup roles carry the group name');

@@ -56,7 +56,7 @@ const reset = () => {
     { id: SCHED_DEAD, name: 'Old', tombstone: 1 },
     { id: SCHED_BLANK, name: null },
   ];
-  sent.length = 0; queries.length = 0; sendError = null;
+  sent.length = 0; queries.length = 0; sendError = null; getSchedulesCalls = 0;
 };
 let sendError = null;
 
@@ -78,7 +78,8 @@ apiDefault.runQuery = async (query) => {
 };
 apiDefault.getPreferences = async () => (currency === undefined ? {} : { defaultCurrencyCode: currency });
 apiDefault.getNote = async () => (note === null ? null : { id: CAT, note });
-apiDefault.getSchedules = async () => schedules;
+let getSchedulesCalls = 0;
+apiDefault.getSchedules = async () => { getSchedulesCalls++; return schedules; };
 apiDefault.getCategories = async () => [
   { id: INCOME, name: 'Salary', is_income: true },
   { id: EXPENSE, name: 'Food', is_income: false },
@@ -110,7 +111,7 @@ const save = (automations, extra = {}, id = CAT) => attempt(adapter.setCategoryA
 const stored1 = () => sent[0]?.args.categoriesWithTemplates[0].templates;
 
 const MSG = {
-  M2: 'The automations editor is not enabled in this budget (setting flags.goalTemplatesUIEnabled). In Actual, turn it on under Settings > Experimental features, then retry. Nothing was changed.',
+  M2: 'Budget automations UI is not enabled in this budget (setting flags.goalTemplatesUIEnabled). In Actual, turn it on under Settings > Experimental features, below Goal templates, then retry. Nothing was changed.',
   M4: "This category's automations come from its #template, #goal or #cleanup note lines. Saving switches it to the automations editor: those lines stop being read (the note text is kept, and its cleanup stays as last stored). Pass confirmNoteSwitch: true (manage_categories: confirm_note_switch) to confirm. Nothing was changed.",
   M1: 'Goal templates are not enabled in this budget. In Actual, turn on Settings > Experimental features > Goal templates, then retry. Nothing was changed.',
 };
@@ -216,23 +217,24 @@ reset(); stored.template_settings = null; note = '#template 50';
   check(stored.template_settings === JSON.stringify({ source: 'ui' }), 'the category now reads as ui');
 }
 
-console.log('\n[#842 U8] schedules are stored by name');
+console.log('\n[#842 U8, #847] schedules are stored by id and name');
 reset();
 {
   const { error } = await save([{ type: 'schedule', scheduleId: SCHED }]);
   check(!error, 'a live schedule by id', String(error?.message));
-  same(stored1(), [{ type: 'schedule', directive: 'template', name: 'Rent', priority: 1 }], 'stored as { type, directive, name, priority }');
+  same(stored1(), [{ type: 'schedule', directive: 'template', scheduleId: SCHED, name: 'Rent', priority: 1 }], 'stored as { type, directive, scheduleId, name, priority }');
+  check(getSchedulesCalls === 1, 'the schedules are read once per save, the read-back adds none', String(getSchedulesCalls));
 }
 reset();
 {
   await save([{ type: 'schedule', name: 'Rent', priority: 3 }]);
-  same(stored1(), [{ type: 'schedule', directive: 'template', name: 'Rent', priority: 3 }], 'by name, with its priority');
+  same(stored1(), [{ type: 'schedule', directive: 'template', scheduleId: SCHED, name: 'Rent', priority: 3 }], 'by name, stored with the resolved id and its priority');
 }
 for (const [label, entry, ctor, text] of [
   ['unknown id', { type: 'schedule', scheduleId: UNKNOWN }, NotFoundRefusal, `Schedule "${UNKNOWN}" not found. Use actual_schedules_get to list available schedules.`],
   ['tombstoned id', { type: 'schedule', scheduleId: SCHED_DEAD }, NotFoundRefusal, `Schedule "${SCHED_DEAD}" not found. Use actual_schedules_get to list available schedules.`],
   ['unknown name', { type: 'schedule', name: 'Nope' }, NotFoundRefusal, 'Schedule "Nope" not found. Use actual_schedules_get to list available schedules.'],
-  ['null name', { type: 'schedule', scheduleId: SCHED_BLANK }, OutOfRangeRefusal, `Schedule "${SCHED_BLANK}" has no name, and Actual matches schedule automations by name: name it in Actual first. Nothing was changed.`],
+  ['null name', { type: 'schedule', scheduleId: SCHED_BLANK }, OutOfRangeRefusal, `Schedule "${SCHED_BLANK}" has no name: the entry is stored with the schedule's name, and Actual fails to apply one whose name is missing, so name it in Actual first. Nothing was changed.`],
 ]) {
   reset();
   const { error } = await save([entry]);
@@ -241,20 +243,40 @@ for (const [label, entry, ctor, text] of [
 }
 reset();
 {
-  const { error } = await save([{ type: 'schedule', scheduleId: SCHED, name: 'Rent' }]);
-  check(error?.name === 'ZodError' && /give exactly one of scheduleId or name\./.test(error.message), 'both scheduleId and name: a schema error', error?.message);
   const none = await save([{ type: 'schedule' }]);
-  check(none.error?.name === 'ZodError' && /give exactly one of scheduleId or name\./.test(none.error.message), 'neither: a schema error');
+  check(none.error?.name === 'ZodError' && /give scheduleId or name\./.test(none.error.message), 'neither: a schema error', none.error?.message);
+  check(sent.length === 0, 'nothing sent');
+}
+
+console.log('\n[#847] a read result carrying both fields or scheduleMissing saves back');
+reset();
+{
+  // As the read returns an entry this server saved, after the schedule was renamed: the id wins.
+  schedules = [{ id: SCHED, name: 'Rent 2027' }];
+  const { error } = await save([{ type: 'schedule', scheduleId: SCHED, name: 'Rent' }]);
+  check(!error, 'both scheduleId and name: accepted', String(error?.message));
+  same(stored1(), [{ type: 'schedule', directive: 'template', scheduleId: SCHED, name: 'Rent 2027', priority: 1 }], 'resolved by id, the live name stored');
+}
+reset();
+{
+  const { error } = await save([{ type: 'schedule', name: 'Rent', scheduleMissing: true }]);
+  check(!error, 'scheduleMissing with a live "Rent": saved', String(error?.message));
+  check(stored1()?.length === 1 && !('scheduleMissing' in stored1()[0]), 'the sent template has no scheduleMissing', JSON.stringify(stored1()));
+}
+reset(); schedules = [];
+{
+  const { error } = await save([{ type: 'schedule', name: 'Rent', scheduleMissing: true }]);
+  check(error instanceof NotFoundRefusal && error.message === 'Schedule "Rent" not found. Use actual_schedules_get to list available schedules.', 'scheduleMissing with no live "Rent": NotFoundRefusal naming it', error?.message);
   check(sent.length === 0, 'nothing sent');
 }
 
 reset(); schedules = [{ id: SCHED, name: ' Rent ' }];
 {
   await save([{ type: 'schedule', scheduleId: SCHED }]);
-  same(stored1(), [{ type: 'schedule', directive: 'template', name: 'Rent', priority: 1 }], 'a padded schedule name is stored trimmed (by id)');
+  same(stored1(), [{ type: 'schedule', directive: 'template', scheduleId: SCHED, name: 'Rent', priority: 1 }], 'a padded schedule name is stored trimmed (by id)');
   reset(); schedules = [{ id: SCHED, name: ' Rent ' }];
   await save([{ type: 'schedule', name: 'Rent' }]);
-  same(stored1(), [{ type: 'schedule', directive: 'template', name: 'Rent', priority: 1 }], 'and matched and stored trimmed (by name)');
+  same(stored1(), [{ type: 'schedule', directive: 'template', scheduleId: SCHED, name: 'Rent', priority: 1 }], 'and matched and stored trimmed (by name)');
 }
 
 console.log('\n[#842] dates are bounded to years 1970 to 2199');

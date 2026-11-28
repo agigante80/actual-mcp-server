@@ -12,7 +12,7 @@ export default createTool({
   description:
     'Experimental (MCP_EXPERIMENTAL=budget_automations; may break on an Actual upgrade). Read one category\'s budget automations (Goal templates) and cleanup. ' +
     'source "ui" (editor-managed): returns automations in Actual\'s field names, with money fields (amount, monthly, limit.amount, fixed adjustment) as integer minor units of the budget currency, ' +
-    'plus errors for any stored entry that is malformed or of an unknown type. ' +
+    'plus errors for any stored entry that is malformed or of an unknown type. scheduleMissing: true marks a schedule entry whose schedule is gone (an apply fails on it). ' +
     'source "notes": returns noteDirectives, the #template, #goal and #cleanup lines of the category note as written (empty when there are none). ' +
     'cleanup lists the stored cleanup roles with groupName. An unknown categoryId is refused. Writes nothing.',
   schema: z.object({

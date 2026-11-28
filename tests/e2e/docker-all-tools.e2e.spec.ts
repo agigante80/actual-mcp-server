@@ -5221,6 +5221,25 @@ test.describe('Docker E2E - compact manage_categories (#676)', () => {
     expect(await budgetedAmount(mcp, category.id), 'the applied amount is stored').toBe(5000);
   });
 
+  // #847: a schedule entry is stored with its id, so a rename keeps it; a deleted schedule marks it.
+  test('list_entities category_automations - a schedule entry survives a rename and is marked once the schedule is deleted (#847)', async ({ mcp, makeCategory, makeSchedule, cleanup }) => {
+    await expectSetAutomations(mcp);
+    const category = await makeCategory();
+    const schedule = await makeSchedule();
+    cleanup.add(CLEANUP_ORDER.note, `automations of ${category.id}`, async () => {
+      await mcp.call('manage_categories', { action: 'set_automations', id: category.id, automations: [] }).catch(() => undefined);
+    });
+    const read = async () => (await mcp.call('list_entities', { type: 'category_automations', category_id: category.id }))?.automations?.[0];
+    await mcp.call('manage_categories', { action: 'set_automations', id: category.id, automations: [{ type: 'schedule', scheduleId: schedule.id }] });
+    const healthy = await read();
+    expect(healthy).toMatchObject({ type: 'schedule', scheduleId: schedule.id, name: schedule.name });
+    expect(healthy, 'a resolving entry carries no marker').not.toHaveProperty('scheduleMissing');
+    await mcp.call('manage_schedules', { action: 'update', id: schedule.id, name: `${schedule.name}-renamed` });
+    expect(await read(), 'the id still resolves after a rename').not.toHaveProperty('scheduleMissing');
+    await mcp.call('manage_schedules', { action: 'delete', id: schedule.id });
+    expect((await read())?.scheduleMissing, 'a deleted schedule marks the entry').toBe(true);
+  });
+
   test('manage_categories set_automations - a note-managed category needs confirm_note_switch (#842)', async ({ mcp, makeCategory, cleanup }) => {
     await expectSetAutomations(mcp);
     const category = await makeCategory();
@@ -6841,6 +6860,25 @@ test.describe('legacy smoke (MCP_TOOL_SURFACE=all)', () => {
     const cleared = await mcp.call('actual_categories_set_automations', { categoryId: category.id, automations: [] });
     expect(cleared?.verified, 'a clear reads back as verified').toBe(true);
     expect(cleared?.automations).toEqual([]);
+  });
+
+  // #847: the legacy read marks a schedule entry whose schedule is gone; a healthy one is unmarked.
+  test('actual_categories_get_automations - a schedule entry is marked scheduleMissing once its schedule is deleted (#847)', async ({ mcp, makeCategory, makeSchedule, cleanup }) => {
+    const names = (await mcp.listTools()).map((t: any) => t.name);
+    expect(names, 'the E2E stack must enable budget_automations').toContain('actual_categories_set_automations');
+    const category = await makeCategory();
+    const schedule = await makeSchedule();
+    cleanup.add(CLEANUP_ORDER.note, `automations of ${category.id}`, async () => {
+      await mcp.call('actual_categories_set_automations', { categoryId: category.id, automations: [] }).catch(() => undefined);
+    });
+    await mcp.call('actual_categories_set_automations', { categoryId: category.id, automations: [{ type: 'schedule', name: schedule.name }] });
+    const healthy = (await mcp.call('actual_categories_get_automations', { categoryId: category.id }))?.automations?.[0];
+    expect(healthy).toMatchObject({ type: 'schedule', scheduleId: schedule.id, name: schedule.name });
+    expect(healthy, 'a resolving entry carries no marker').not.toHaveProperty('scheduleMissing');
+    await mcp.call('actual_schedules_delete', { id: schedule.id });
+    const broken = (await mcp.call('actual_categories_get_automations', { categoryId: category.id }))?.automations?.[0];
+    expect(broken?.scheduleMissing, 'a deleted schedule marks the entry').toBe(true);
+    expect(await refusal(() => mcp.call('actual_categories_set_automations', { categoryId: category.id, automations: [broken] })), 'saving it back while the schedule is gone is refused').toMatch(/not found/i);
   });
 
   test('actual_entities_search - finds a seeded payee and returns nothing for a nonsense query', async ({ mcp, makePayee }) => {

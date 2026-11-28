@@ -130,6 +130,29 @@ export interface CategoryAutomationsRows {
   currencyCode: unknown;
   cleanupGroupNames: ReadonlyMap<string, string>;
   categoryNames: ReadonlyMap<string, string>;
+  /**
+   * The budget's schedules, given only when a stored `schedule` entry should be checked (#847).
+   * Absent means no check, so a `schedule` entry is returned exactly as stored.
+   */
+  schedules?: ReadonlyArray<{ id?: unknown; name?: unknown; tombstone?: unknown }>;
+}
+
+/**
+ * Would upstream's apply find this stored `schedule` entry (#847)? Mirrors the existence check in
+ * upstream category-template-context.ts (@actual-app/api 26.11.0): the live schedules are those
+ * with a name and no tombstone; an entry with `scheduleId` needs a live schedule with that id
+ * (the id wins over the name), and a name-only entry needs one whose trimmed name equals its
+ * trimmed name, case sensitive. Anything else throws there and that apply budgets nothing.
+ */
+export function scheduleEntryResolves(entry: Entry, schedules: NonNullable<CategoryAutomationsRows['schedules']>): boolean {
+  const live = schedules.filter((s) => !s?.tombstone && typeof s?.name === 'string');
+  if (typeof entry.scheduleId === 'string' && entry.scheduleId !== '') return live.some((s) => s.id === entry.scheduleId);
+  if (typeof entry.name !== 'string' || entry.name.trim() === '') return false;
+  // Upstream's existence check trims both sides, but its lookup (schedule-template.ts) runs
+  // TRIM(name) = ? with the stored name UNTRIMMED, so a padded stored name fails the apply:
+  // compare the live name trimmed against the stored name as it is.
+  const wanted = entry.name;
+  return live.some((s) => (s.name as string).trim() === wanted);
 }
 
 export interface EditorAutomations {
@@ -202,7 +225,9 @@ export function shapeCategoryAutomations(rows: CategoryAutomationsRows): EditorA
     for (const item of parsed) {
       const type = isObject(item) && typeof item.type === 'string' ? item.type : undefined;
       if (isObject(item) && type !== undefined && KNOWN_TYPES.has(type)) {
-        automations.push(convertEntry(item, decimalPlaces, rows.categoryNames));
+        const entry = convertEntry(item, decimalPlaces, rows.categoryNames);
+        if (type === 'schedule' && rows.schedules && !scheduleEntryResolves(entry, rows.schedules)) entry.scheduleMissing = true;
+        automations.push(entry);
         continue;
       }
       const err: AutomationError = { type: type ?? 'unknown' };
@@ -296,8 +321,11 @@ const schedule = z.strictObject({
   name: z.string().min(1).optional(),
   priority,
   description,
+  // The read's marker (#847), accepted so a read result can be saved back, and never stored.
+  scheduleMissing: z.boolean().optional(),
 }).superRefine((v, ctx) => {
-  if ((v.scheduleId === undefined) === (v.name === undefined)) ctx.addIssue({ code: 'custom', message: 'give exactly one of scheduleId or name.' });
+  // Both are accepted (a read of an entry this server saved carries both); the id then wins.
+  if (v.scheduleId === undefined && v.name === undefined) ctx.addIssue({ code: 'custom', message: 'give scheduleId or name.' });
 });
 
 export const EDITOR_AUTOMATION = z.discriminatedUnion('type', [periodic, limit, refill, percentage, average, by, remainder, goal, schedule]);
@@ -339,21 +367,24 @@ export function toStoredUnits(minorAmount: number, currencyCode: unknown): numbe
 
 /**
  * The stored form of validated entries. `directive` is set here (upstream ignores an entry
- * without it), money is in currency units, a schedule is stored by NAME (`scheduleNames` maps the
- * list index to the live schedule's name), `categoryName` is dropped, and limit and remainder
- * carry `priority: null`. Returns new objects.
+ * without it), money is in currency units, a schedule is stored by its id AND its name
+ * (`scheduleRefs` maps the list index to the live schedule; upstream looks the id up first, so a
+ * rename does not break it, and prints the name), `categoryName` and `scheduleMissing` are
+ * dropped, and limit and remainder carry `priority: null`. Returns new objects.
  */
 export function toStoredAutomations(
   list: readonly EditorAutomation[],
   currencyCode: unknown,
-  scheduleNames: ReadonlyMap<number, string> = new Map(),
+  scheduleRefs: ReadonlyMap<number, { id: string; name: string }> = new Map(),
 ): Array<Record<string, unknown>> {
   return list.map((entry, index) => {
     const { type, directive: _directive, description: text, ...rest } = entry as Entry & { type: string };
     const head = { type, directive: type === 'goal' ? 'goal' : 'template' };
     const tail = text !== undefined ? { description: text } : {};
     if (type === 'schedule') {
-      return { ...head, name: scheduleNames.get(index) ?? rest.name, priority: rest.priority, ...tail };
+      const ref = scheduleRefs.get(index);
+      const ids = ref ? { scheduleId: ref.id, name: ref.name } : { ...(rest.scheduleId !== undefined ? { scheduleId: rest.scheduleId } : {}), name: rest.name };
+      return { ...head, ...ids, priority: rest.priority, ...tail };
     }
     const { categoryName: _categoryName, priority: _priority, ...fields } = rest;
     if (typeof fields.amount === 'number') fields.amount = toStoredUnits(fields.amount, currencyCode);
