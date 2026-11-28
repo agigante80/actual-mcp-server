@@ -148,6 +148,9 @@ console.log('\n[#847] a schedule entry Actual can no longer resolve carries sche
   category = ui([{ type: 'periodic', amount: 1, period: { period: 'month', amount: 1 } }]);
   await run();
   check(calls.getSchedules === 0, 'no schedule entry: the schedules are never read', JSON.stringify(calls));
+  category = ui([{ type: 'periodic', amount: 1, period: { period: 'month', amount: 1 }, description: 'schedule' }]);
+  await run();
+  check(calls.getSchedules === 0, 'a description reading "schedule" does not trigger the read', JSON.stringify(calls));
   schedules = [{ id: SCHED, name: 'Rent', tombstone: false }];
 }
 

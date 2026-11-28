@@ -5235,6 +5235,9 @@ test.describe('Docker E2E - compact manage_categories (#676)', () => {
     expect(healthy).toMatchObject({ type: 'schedule', scheduleId: schedule.id, name: schedule.name });
     expect(healthy, 'a resolving entry carries no marker').not.toHaveProperty('scheduleMissing');
     await mcp.call('manage_schedules', { action: 'update', id: schedule.id, name: `${schedule.name}-renamed` });
+    const listed = await mcp.call('list_entities', { type: 'schedule' });
+    const all: any[] = listed?.schedules ?? listed?.result?.schedules ?? (Array.isArray(listed) ? listed : []);
+    expect(all.find((s: any) => s.id === schedule.id)?.name, 'the rename landed').toBe(`${schedule.name}-renamed`);
     expect(await read(), 'the id still resolves after a rename').not.toHaveProperty('scheduleMissing');
     await mcp.call('manage_schedules', { action: 'delete', id: schedule.id });
     expect((await read())?.scheduleMissing, 'a deleted schedule marks the entry').toBe(true);

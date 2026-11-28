@@ -145,6 +145,8 @@ export interface CategoryAutomationsRows {
  * trimmed name, case sensitive. Anything else throws there and that apply budgets nothing.
  */
 export function scheduleEntryResolves(entry: Entry, schedules: NonNullable<CategoryAutomationsRows['schedules']>): boolean {
+  // NOT NULL is upstream's whole test (getActiveSchedules): a blank name is live and an id entry
+  // on it applies, so it is not marked here even though the save refuses it (PR 853 review).
   const live = schedules.filter((s) => !s?.tombstone && typeof s?.name === 'string');
   if (typeof entry.scheduleId === 'string' && entry.scheduleId !== '') return live.some((s) => s.id === entry.scheduleId);
   if (typeof entry.name !== 'string' || entry.name.trim() === '') return false;

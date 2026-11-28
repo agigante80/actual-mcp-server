@@ -6361,6 +6361,17 @@ export async function getCategoryAutomations(categoryId: string): Promise<Editor
   });
 }
 
+/** True when the stored editor list holds a `schedule` entry (#847). Malformed JSON holds none. */
+function hasScheduleEntry(goalDef: unknown): boolean {
+  if (typeof goalDef !== 'string') return false;
+  try {
+    const list: unknown = JSON.parse(goalDef);
+    return Array.isArray(list) && list.some((e) => (e as { type?: unknown } | null)?.type === 'schedule');
+  } catch {
+    return false;
+  }
+}
+
 /**
  * The read body of getCategoryAutomations, WITHOUT a session of its own, so the save (#842) can run
  * it inside its write operation: nesting `getCategoryAutomations` there would stall on the api
@@ -6386,8 +6397,8 @@ async function loadCategoryAutomations(categoryId: string, options: { markSchedu
   const needsNames = typeof category.goal_def === 'string' && category.goal_def.includes('"percentage"');
   const categories = needsNames ? await read(q('categories').select(['id', 'name'])) : [];
   const noteManaged = templateSource(category.template_settings) === 'notes';
-  const needsSchedules = options.markSchedules === true && !noteManaged
-    && typeof category.goal_def === 'string' && category.goal_def.includes('"schedule"');
+  // Parsed, not a substring test: a description reading "schedule" must not trigger the read (PR 853).
+  const needsSchedules = options.markSchedules === true && !noteManaged && hasScheduleEntry(category.goal_def);
   const schedules = needsSchedules
     ? await withConcurrency(() => retry(() => rawGetSchedules() as Promise<unknown>, { retries: 2, backoffMs: 200, isRetryable: isRetryableError }))
     : undefined;
