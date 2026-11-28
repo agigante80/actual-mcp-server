@@ -18,7 +18,7 @@ import { join } from 'node:path';
 // `internal` stays null for ever and the send below throws on null (first real run of #841).
 import api from '@actual-app/api';
 
-// #842: the automations editor save needs the second flag as well.
+// #842: the automations save needs the second flag (Budget automations UI) as well.
 const FLAGS = ['flags.goalTemplatesEnabled', 'flags.goalTemplatesUIEnabled'];
 const serverURL = process.env.ACTUAL_SERVER_URL;
 const password = process.env.ACTUAL_PASSWORD;

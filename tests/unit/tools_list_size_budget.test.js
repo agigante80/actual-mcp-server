@@ -136,7 +136,12 @@ const PER_TOOL_CEILING = 3900;
 // #842 adds actual_categories_set_automations to the same feature. Measured with the feature on: 89 tools,
 // 135,670 bytes (132,718 before, 2,952 added), heaviest entry unchanged and under the per-tool ceiling;
 // the ceiling is that plus 8.
-const EXPERIMENTAL_TOTAL_CEILING = 135678;
+// #847 documents the scheduleMissing marker on the read and the id-plus-name save (the old "renaming
+// breaks it" clause removed, the label "Budget automations UI"), trimmed to one short sentence each.
+// Measured with the feature on: 89 tools, 135,771 bytes (135,670 before, 101 added); the ceiling is
+// that plus 8. The compact total (46,031 measured, list_entities trimmed to pay for its scheduleMissing
+// clause) and the per-tool ceiling are unchanged.
+const EXPERIMENTAL_TOTAL_CEILING = 135779;
 // The ceiling for the compact tools COMBINED (what the `compact` surface lists; the design
 // record plans 15). The per-tool ceiling above applies to each compact entry unchanged. The
 // `all` surface lists both, so its budget is the sum of the two ceilings, never a third number.

@@ -70,7 +70,7 @@ const row = (legacy: string, routes?: readonly CompactRoute[]): CompactActionRow
 /**
  * The description for the actions a process offers. With the experimental feature off (the default)
  * `category_automations` is not named and the text is byte-identical to the one before that action existed.
- * With it on, three lines are shortened: this entry sits at the 3,900 byte per-tool ceiling by default, so
+ * With it on, four lines are shortened: this entry sits at the 3,900 byte per-tool ceiling by default, so
  * the new action pays for itself (tests/unit/tools_list_size_budget.test.js measures the feature-on run).
  */
 function describe(ctx: DescriptionContext): string {
@@ -80,18 +80,20 @@ function describe(ctx: DescriptionContext): string {
     (automations ? ', category_automations' : '') +
     ' or budget_file. For the whole budget structure, server details or preferences in one call use get_context instead.\n' +
     (automations
-      ? 'With only type it lists every entity. A field the type does not take is refused.\n'
+      ? 'Type alone lists every entity; a field the type does not take is refused.\n'
       : 'With only type it lists every entity of that type. A field the type does not take is refused naming the field.\n') +
     'account, category, payee: query (string or array) with match_type and limit to search by name, or name to resolve one exact name to its id, refused with the candidate ids when several share it.\n' +
     (automations
-      ? 'payee: also sort frequency (the 10 most used payees of the last 12 weeks).\n'
+      ? 'payee: also sort frequency (the 10 most used in the last 12 weeks).\n'
       : 'payee: also sort frequency (the 10 most used payees of the last 12 weeks; a transfer payee can appear, with transfer_acct null).\n') +
-    'schedule: name to resolve its id, or schedule_id with start, end and count (default and maximum 366) to list the dates it falls on.\n' +
+    (automations
+      ? 'schedule: name to resolve its id, or schedule_id with start, end and count (default and max 366) to list its dates.\n'
+      : 'schedule: name to resolve its id, or schedule_id with start, end and count (default and maximum 366) to list the dates it falls on.\n') +
     'rule: payee_id to list that payee\'s rules.\n' +
     (automations
       ? 'tag: the tag list.\nnote: requires id.\n'
       : 'tag: the tag list (colour, description); tags used only in notes are not listed.\nnote: requires id (an entity UUID or budget-YYYY-MM).\n') +
-    (automations ? 'category_automations (experimental): requires category_id.\n' : '') +
+    (automations ? 'category_automations (experimental): requires category_id; scheduleMissing: true fails an apply.\n' : '') +
     'budget_file: scope configured (default; active true marks this session\'s budget) or server.\n' +
     'query and name are mutually exclusive, as are schedule_id and name; match_type and limit need query; start, end and count need schedule_id; sort allows no other field.\n' +
     'Returns the list for the type; a query returns { matches, count, total, truncated }, a name returns the id, a schedule_id returns { schedule_id, name, dates, count, truncated }, and a note returns { found, id, note }.'

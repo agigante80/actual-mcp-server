@@ -28,9 +28,9 @@ export default createTool({
   name: 'actual_categories_set_automations',
   description:
     'Experimental (MCP_EXPERIMENTAL=budget_automations; may break on an Actual upgrade). WRITES one category\'s budget automations in the editor form (source "ui"); the list REPLACES what is stored. ' +
-    'Needs Settings > Experimental features > Goal templates AND the automations editor on in this budget; if either is off the call is refused and nothing changes. ' +
+    'Needs Settings > Experimental features > Goal templates AND its Budget automations UI on in this budget; if either is off the call is refused and nothing changes. ' +
     'Entries use the shape actual_categories_get_automations returns, so a read result can be edited and sent back. Entry types: periodic, limit, refill, percentage, average, by, remainder, goal, schedule. ' +
-    'Money is integer minor units of the budget currency. A schedule entry names a schedule by scheduleId or name; Actual matches it by NAME, so renaming that schedule later breaks the entry. ' +
+    'Money is integer minor units of the budget currency. A schedule entry names a schedule by scheduleId or name (both: id wins), stored with both so a rename keeps it; scheduleMissing is ignored. ' +
     'A category whose automations are #template, #goal or #cleanup note lines is refused unless confirmNoteSwitch is true: saving switches it to the editor and those lines stop being read (the note text is kept). Cleanup is never changed. ' +
     'Refused before writing: more than one limit or goal, refill without a limit, a weekly limit without start, percentages of one source over 100, schedule and by entries with different priorities, an unknown or unnamed schedule, a percentage source that is not an income category. ' +
     'Returns the saved automations as actual_categories_get_automations does, plus verified (false: the stored value was not seen to match; re-read it before retrying).',

@@ -6357,7 +6357,7 @@ export async function getPreferences(): Promise<Record<string, unknown>> {
 export async function getCategoryAutomations(categoryId: string): Promise<EditorAutomations | NoteAutomations> {
   return withActualApi(async () => {
     observability.incrementToolCall('actual.categories.get_automations').catch(() => {});
-    return (await loadCategoryAutomations(categoryId)).result;
+    return (await loadCategoryAutomations(categoryId, { markSchedules: true })).result;
   });
 }
 
@@ -6365,8 +6365,11 @@ export async function getCategoryAutomations(categoryId: string): Promise<Editor
  * The read body of getCategoryAutomations, WITHOUT a session of its own, so the save (#842) can run
  * it inside its write operation: nesting `getCategoryAutomations` there would stall on the api
  * lock. Returns the shaped result and the raw stored columns the save compares against.
+ * `markSchedules` (#847, the read tool only) also reads the schedules, and only when a stored
+ * entry is a `schedule`, so a broken entry carries `scheduleMissing: true`. The save leaves it
+ * off: it resolves every schedule itself, and its read-back polls must not add a read each.
  */
-async function loadCategoryAutomations(categoryId: string): Promise<{ result: EditorAutomations | NoteAutomations; goalDef: unknown; templateSettings: unknown; currencyCode: unknown }> {
+async function loadCategoryAutomations(categoryId: string, options: { markSchedules?: boolean } = {}): Promise<{ result: EditorAutomations | NoteAutomations; goalDef: unknown; templateSettings: unknown; currencyCode: unknown }> {
   const { q } = (await import('@actual-app/api')) as any; // eslint-disable-line @typescript-eslint/no-explicit-any
   const read = (query: unknown): Promise<Array<Record<string, unknown>>> =>
     withConcurrency(() => retry(async () => {
@@ -6383,6 +6386,11 @@ async function loadCategoryAutomations(categoryId: string): Promise<{ result: Ed
   const needsNames = typeof category.goal_def === 'string' && category.goal_def.includes('"percentage"');
   const categories = needsNames ? await read(q('categories').select(['id', 'name'])) : [];
   const noteManaged = templateSource(category.template_settings) === 'notes';
+  const needsSchedules = options.markSchedules === true && !noteManaged
+    && typeof category.goal_def === 'string' && category.goal_def.includes('"schedule"');
+  const schedules = needsSchedules
+    ? await withConcurrency(() => retry(() => rawGetSchedules() as Promise<unknown>, { retries: 2, backoffMs: 200, isRetryable: isRetryableError }))
+    : undefined;
   const noteRow = noteManaged
     ? await withConcurrency(() => retry(() => rawGetNote(categoryId) as Promise<{ id: string; note: string } | null>, { retries: 2, backoffMs: 200 }))
     : null;
@@ -6398,6 +6406,7 @@ async function loadCategoryAutomations(categoryId: string): Promise<{ result: Ed
     currencyCode: prefs?.defaultCurrencyCode,
     cleanupGroupNames: names(groups),
     categoryNames: names(categories),
+    ...(needsSchedules ? { schedules: Array.isArray(schedules) ? (schedules as Array<Record<string, unknown>>) : [] } : {}),
   });
   return { result, goalDef: category.goal_def, templateSettings: category.template_settings, currencyCode: prefs?.defaultCurrencyCode };
 }
@@ -6622,8 +6631,10 @@ async function runSetCategoryAutomations(
     throw new OutOfRangeRefusal(NOTE_SWITCH_MESSAGE, categoryId);
   }
 
-  // 5. Schedules: matched by NAME upstream, so each must be live and named. The name is what is stored.
-  const scheduleNames = new Map<number, string>();
+  // 5. Schedules: each must be live and named. Upstream looks a stored entry up by `scheduleId`
+  // first and by TRIM(name) only without one, and prints the name, so both are stored (#847).
+  // An entry carrying both (a read result saved back) is resolved by its id.
+  const scheduleRefs = new Map<number, { id: string; name: string }>();
   if (parsed.some((e) => e.type === 'schedule')) {
     const schedules = (await read(() => rawGetSchedules() as Promise<unknown[]>)) as Array<{ id?: string; name?: string | null; tombstone?: unknown }>;
     const live = (Array.isArray(schedules) ? schedules : []).filter((s) => !s?.tombstone);
@@ -6633,13 +6644,12 @@ async function runSetCategoryAutomations(
         const row = live.find((s) => s.id === entry.scheduleId);
         if (!row) throw new NotFoundRefusal('Schedule', entry.scheduleId, 'actual_schedules_get');
         if (typeof row.name !== 'string' || row.name.trim() === '') throw new OutOfRangeRefusal(UNNAMED_SCHEDULE_MESSAGE(entry.scheduleId), entry.scheduleId);
-        // Trimmed: upstream looks the schedule up with TRIM(name) = <stored name> at apply time.
-        scheduleNames.set(index, row.name.trim());
+        scheduleRefs.set(index, { id: entry.scheduleId, name: row.name.trim() });
       } else {
         const wanted = String(entry.name).trim();
-        const row = live.find((s) => typeof s.name === 'string' && s.name.trim() !== '' && s.name.trim() === wanted);
+        const row = live.find((s) => typeof s.id === 'string' && typeof s.name === 'string' && s.name.trim() !== '' && s.name.trim() === wanted);
         if (!row) throw new NotFoundRefusal('Schedule', String(entry.name), 'actual_schedules_get');
-        scheduleNames.set(index, (row.name as string).trim());
+        scheduleRefs.set(index, { id: row.id as string, name: (row.name as string).trim() });
       }
     });
   }
@@ -6656,7 +6666,7 @@ async function runSetCategoryAutomations(
   }
 
   // The write: once, never retried, `source` fixed and no `cleanup` key.
-  const templates = toStoredAutomations(parsed, existing.currencyCode, scheduleNames);
+  const templates = toStoredAutomations(parsed, existing.currencyCode, scheduleRefs);
   await internalSend('budget/set-category-automations', { categoriesWithTemplates: [{ id: categoryId, templates }], source: 'ui' });
 
   // The result: the read side's shape, once the stored column shows what was sent (a raw write lands late, #493).

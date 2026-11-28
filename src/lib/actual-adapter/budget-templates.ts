@@ -15,17 +15,19 @@ export const GOAL_TEMPLATES_DISABLED_MESSAGE =
 /**
  * #842: the synced preference behind the automations editor (`FeatureFlag goalTemplatesUIEnabled`
  * in @actual-app/core, not in the api bundle). Upstream does not enforce it on the save handler.
+ * Actual labels it "Budget automations UI", a sub-toggle under Goal templates (#847, read in
+ * Experimental.tsx at v26.11.0), so the refusal names that label.
  */
 export const GOAL_TEMPLATES_UI_FLAG = 'flags.goalTemplatesUIEnabled';
 
 export const AUTOMATIONS_UI_DISABLED_MESSAGE =
-  'The automations editor is not enabled in this budget (setting flags.goalTemplatesUIEnabled). In Actual, turn it on under Settings > Experimental features, then retry. Nothing was changed.';
+  'Budget automations UI is not enabled in this budget (setting flags.goalTemplatesUIEnabled). In Actual, turn it on under Settings > Experimental features, below Goal templates, then retry. Nothing was changed.';
 
 export const NOTE_SWITCH_MESSAGE =
   "This category's automations come from its #template, #goal or #cleanup note lines. Saving switches it to the automations editor: those lines stop being read (the note text is kept, and its cleanup stays as last stored). Pass confirmNoteSwitch: true (manage_categories: confirm_note_switch) to confirm. Nothing was changed.";
 
 export const UNNAMED_SCHEDULE_MESSAGE = (id: string): string =>
-  `Schedule "${id}" has no name, and Actual matches schedule automations by name: name it in Actual first. Nothing was changed.`;
+  `Schedule "${id}" has no name: the entry is stored with the schedule's name, and Actual fails to apply one whose name is missing, so name it in Actual first. Nothing was changed.`;
 
 export const PERCENTAGE_SOURCE_MESSAGE = (id: string): string =>
   `percentage category "${id}" is not an income category: use an income category id, "all income" or "available funds". Nothing was changed.`;

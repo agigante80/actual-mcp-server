@@ -204,13 +204,13 @@ await check('4b: a returned top-level error string is rewritten to the route phr
   assert.ok(!/actual_/.test(r.error) && /list_entities with type and query/.test(r.error), r.error);
 });
 
-// #840: spec.description is the FULL surface, which with the experimental feature on shortens three
-// lines to pay for category_automations. The clauses below are asserted on the DEFAULT surface, the
+// #840: spec.description is the FULL surface, which with the experimental feature on shortens four
+// lines (#847 added the fourth) to pay for category_automations. The clauses below are asserted on the DEFAULT surface, the
 // text a server with MCP_EXPERIMENTAL unset publishes.
 const defaultDescription = spec.describeFor({ hasAction: (a) => a !== 'category_automations', hasTool: () => true });
 await check('#840: the default description does not name the experimental action, the full one does', () => {
   assert.ok(!defaultDescription.includes('category_automations'));
-  assert.ok(spec.description.includes('category_automations (experimental): requires category_id.'));
+  assert.ok(spec.description.includes('category_automations (experimental): requires category_id; scheduleMissing: true fails an apply.'));
 });
 await check('#702: the description says tags used only in notes are not listed', () => {
   assert.ok(defaultDescription.includes('only in notes are not listed'));
