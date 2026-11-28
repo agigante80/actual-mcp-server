@@ -114,6 +114,12 @@ Both scanners fail closed (exit 2 with the file named) when something cannot be 
 |---|---|---|
 | `hooks/block-closing-keyword.py` | `.claude/settings.local.json` (`PreToolUse` on `Bash`, local and untracked) | #405: blocks a commit whose message would make GitHub CLOSE a ticket its author is saying they did NOT fix. It lives here rather than under `.claude/hooks/` because `tests/unit/commit_message_closing_keyword.test.js` executes it, and `.claude/` is never checked out in CI. |
 
+## Review tooling
+
+| Script | npm script | Purpose |
+|--------|-----------|---------|
+| `check-coderabbit-applied.mjs` | (manual) | #851: `node scripts/check-coderabbit-applied.mjs <pr>` reads the CodeRabbit bot's Run configuration block on a pull request (issue comments and review bodies, read only through `gh`) and passes only when it names `.coderabbit.yaml` at the head commit with `Layers` exactly `Repository YAML`, with no parsing error and no `Enforced overrides`. Exit 0 pass, 1 problem or no bot comment yet, 2 usage, 3 `gh` failed. Run it inside the checkout (`gh` resolves the repository from the GitHub remote), before merging a pull request that changes `.coderabbit.yaml` (docs/development/testing-and-reliability.md). |
+
 ## ACL end-to-end (#338 / #343)
 
 | Script | Purpose |

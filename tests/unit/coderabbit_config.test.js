@@ -13,6 +13,11 @@
 // in either makes the app run an agent with our instructions: reviews.finishing_touches.custom
 // (recipes that can change the pull request branch) and reviews.post_merge_actions. Absent
 // counts as a failure, so the pin cannot be dropped silently.
+// #851: twelve more rules a loosening edit would otherwise pass: eight keys false or absent,
+// version and auto_approvals.overrides absent, chat.auto_reply present and false (on by
+// default), reviews.review_info true or absent (scripts/check-coderabbit-applied.mjs reads
+// that block). Pin list last reconciled with forge-kit-review 0.11.0. Whether the app
+// APPLIED the file is a separate check: scripts/check-coderabbit-applied.mjs, per pull request.
 //
 // Run: node tests/unit/coderabbit_config.test.js
 
@@ -33,6 +38,22 @@ const DOCS_CHECK = 'Docs cover the change';
 // #727: checks are looked up by NAME, never by position, so reordering the list is free.
 const CHECK_HEADINGS = { [TESTS_CHECK]: TEST_REVIEW_HEADING, [DOCS_CHECK]: DOCS_HEADING };
 const TONE_MAX = 250; // schema maxLength for tone_instructions
+// #851: each can make the app act (approve, request changes, review drafts, assign,
+// label) or inherit settings from outside the file. inheritance and early_access sit at the
+// top level; request_changes_workflow and allow_author_approval are legacy aliases.
+const FALSE_OR_ABSENT = [
+  'inheritance',
+  'early_access',
+  'reviews.request_changes_workflow',
+  'reviews.allow_author_approval',
+  'reviews.auto_review.drafts',
+  'reviews.auto_assign_reviewers',
+  'reviews.auto_approvals.approve_on_skipped_review',
+  'issue_enrichment.labeling.auto_apply_labels',
+];
+// version: the vendor validator rejects the key in any form. overrides: a bare entry drops
+// the whole file, and with auto_approvals off no entry is needed.
+const MUST_BE_ABSENT = ['version', 'reviews.auto_approvals.overrides'];
 // Built from code points so this file carries neither character itself.
 const DASHES = [0x2013, 0x2014].map((c) => String.fromCharCode(c));
 
@@ -123,6 +144,31 @@ export function checkConfig(cfg) {
   }
   const tone = cfg?.tone_instructions ?? '';
   if (tone.length > TONE_MAX) fail(`tone_instructions exceeds ${TONE_MAX} characters`);
+  // #851: keys the file does not need to write, but must not loosen. "Absent" is the key
+  // not being present at all: `version: null` or `overrides: []` is present, and fails.
+  for (const key of FALSE_OR_ABSENT) {
+    const [found, value] = lookup(cfg, key);
+    if (found && value !== false) fail(`${key} must be false or absent`);
+  }
+  for (const key of MUST_BE_ABSENT) {
+    if (lookup(cfg, key)[0]) fail(`${key} must be absent`);
+  }
+  // The vendor default is ON, so dropping the line turns replies on: present and false.
+  if (cfg?.chat?.auto_reply !== false) fail('chat.auto_reply must be false');
+  // check-coderabbit-applied.mjs reads the Review info block this key switches off.
+  const [hasInfo, info] = lookup(cfg, 'reviews.review_info');
+  if (hasInfo && info !== true) fail('reviews.review_info must be true or absent');
+}
+
+// #851: [found, value] for a dotted key; found is false when any parent is missing or is
+// not an object, or the last object has no such own key.
+function lookup(cfg, dotted) {
+  let node = cfg;
+  for (const part of dotted.split('.')) {
+    if (node === null || typeof node !== 'object' || !Object.hasOwn(node, part)) return [false, undefined];
+    node = node[part];
+  }
+  return [true, node];
 }
 
 let passed = 0;
@@ -213,6 +259,43 @@ check('the custom checks pass in either order', () => {
 });
 refuses('a built-in check in error mode', (c) => { c.reviews.pre_merge_checks.title = { mode: 'error' }; },
   'coderabbit config: pre_merge_checks.title.mode must not be error');
+
+// #851: set a dotted key, creating missing parents, so a rule is tested whether or not the
+// committed file writes the key out.
+function put(cfg, dotted, value) {
+  const parts = dotted.split('.');
+  const last = parts.pop();
+  let node = cfg;
+  for (const part of parts) node = node[part] ??= {};
+  node[last] = value;
+}
+for (const key of FALSE_OR_ABSENT) {
+  refuses(`${key} true`, (c) => put(c, key, true), `coderabbit config: ${key} must be false or absent`);
+}
+refuses('inheritance with no value (null)', (c) => { c.inheritance = null; },
+  'coderabbit config: inheritance must be false or absent');
+refuses('drafts set to a number', (c) => { c.reviews.auto_review.drafts = 0; },
+  'coderabbit config: reviews.auto_review.drafts must be false or absent');
+refuses('drafts set to a string', (c) => { c.reviews.auto_review.drafts = 'no'; },
+  'coderabbit config: reviews.auto_review.drafts must be false or absent');
+refuses('chat.auto_reply removed (vendor default is on)', (c) => { delete c.chat.auto_reply; },
+  'coderabbit config: chat.auto_reply must be false');
+refuses('chat.auto_reply true', (c) => { c.chat.auto_reply = true; },
+  'coderabbit config: chat.auto_reply must be false');
+refuses('a version key', (c) => { c.version = 2; }, 'coderabbit config: version must be absent');
+refuses('version set to null', (c) => { c.version = null; }, 'coderabbit config: version must be absent');
+refuses('an override entry', (c) => { c.reviews.auto_approvals.overrides = [{ enabled: false }]; },
+  'coderabbit config: reviews.auto_approvals.overrides must be absent');
+refuses('an empty overrides list', (c) => { c.reviews.auto_approvals.overrides = []; },
+  'coderabbit config: reviews.auto_approvals.overrides must be absent');
+refuses('review_info switched off', (c) => { c.reviews.review_info = false; },
+  'coderabbit config: reviews.review_info must be true or absent');
+check('false or absent keys may be written out as false', () => {
+  const cfg = load();
+  for (const key of FALSE_OR_ABSENT) put(cfg, key, false);
+  put(cfg, 'reviews.review_info', true);
+  checkConfig(cfg);
+});
 
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed) process.exit(1);
